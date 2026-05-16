@@ -29,17 +29,42 @@
 - [x] Phase 5: Lottie assets created (success.json, error.json) + LottieSuccessView/LottieErrorView widgets
 - [x] Phase 5: All analyzer errors fixed — zero errors, clean build
 
-## Now — Feature Development
-- [ ] OneSignal push notifications — collect device token on login, store in `users` table or dedicated `push_tokens` table, send from edge functions
-- [ ] Stripe webhook edge function — `supabase functions deploy stripe-webhook` + set `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` env secrets
-- [ ] Twilio SMS integration — pickup reminders for residents
-- [ ] Mapbox route mapping for WorkerDashboard — show tonight's route on a map
+## Completed (2026-05-16 session 5)
+- [x] Redesigned 3 old-style screens to dark design system: ResidentViolationsScreen, SimpleNotificationSenderScreen, TodayComebacksScreen
+- [x] Added OM Profile tab with sign-out button (5th tab)
+- [x] flutter_map route map for workers — WorkerRouteMapScreen (OpenStreetMap, no API key, route stops list)
+- [x] Resident missed-pickup reporting — ResidentReportMissedPickupScreen (photo + notes → missed_pickup_requests)
+- [x] Worker proof-of-pickup photo — bottom sheet on comeback completion with optional photo upload to violations bucket
+- [x] Pickup status banner — resident Home tab polls nightly_runs every 30s, shows "porter is collecting" / "pickup complete" banner
+
+## Schema Changes Applied (2026-05-16)
+- `missed_pickup_requests`: `notes text`, `photo_url text` — added via SQL editor
+- `properties`: `latitude double precision`, `longitude double precision` — added via SQL editor
+
+## Now — Feature Development (all completed 2026-05-16 session 7)
+- [x] Resident: vacation/hold service — ResidentVacationHoldScreen, writes is_on_hold/hold_note to resident_units
+- [x] Worker: earnings dashboard — WorkerEarningsScreen reads clock_events; _toggleDuty() persists clock in/out
+- [x] PM compliance/SLA reporting — PmComplianceReportScreen with date range picker + CSV export via dart:html
+- [x] OM live worker location map — OmWorkerMapScreen with Supabase Realtime stream on worker_locations
+- [x] Worker: location sharing button — calls dart:html geolocation + upserts to worker_locations
+- [x] Light mode theme for PM/Owner roles — implemented via AppColorsScheme ThemeExtension
+
+## Push Notifications (when ready to ship native)
+- Flutter compiles to native iOS + Android — push notifications ARE relevant for mobile
+- **Android:** FCM (Firebase Cloud Messaging) — free, no third-party needed
+- **iOS:** APNs — requires Apple Developer account ($99/yr); OneSignal simplifies setup
+- **Web:** Service Worker + Web Push API — no external service needed
+- Defer until preparing for App Store / Play Store submission
+
+## Payments (when ready)
+- [ ] Stripe webhook edge function — blocked on Stripe account + webhook secret
+- SMS pickup reminders (Twilio) — deprioritized; in-app banner + email covers the use case
 
 ## Technical Debt / Improvements
-- [ ] Replace `withOpacity()` with `.withValues(alpha: ...)` throughout to fix deprecation warnings
-- [ ] Remove `_legacyBuild()` and `_buildLegacyDashboard()` dead code from OM/PM dashboard files
-- [ ] Upgrade `supabase_flutter` from v1.10.25 to v2 (plan carefully — many breaking changes)
-- [ ] Add `.env.example` file so new developers know required variables
+- [x] Replace `withOpacity()` with `.withValues(alpha: ...)` throughout — 23 files, 0 remaining
+- [x] Remove `_legacyBuild()` and `_buildLegacyDashboard()` dead code — 867 lines deleted
+- [x] Add `.env.example` file for developer onboarding
+- [ ] Upgrade `supabase_flutter` from v1.10.25 to v2 — **BLOCKED**: transitive deps `app_links-7.0.0` and `sign_in_with_apple_web` not resolving in this environment (missing from pub cache, `pub cache repair` didn't fix it). Try on a machine with full internet access or VPN.
 - [ ] Add integration tests for the invite code flow
 - [ ] Clarify `main_simple.dart` — remove or document purpose
 - [ ] Confirm admin_dashboard targets the correct Supabase project

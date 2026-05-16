@@ -5,6 +5,28 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-16 (Session 7 — Features + Tech Debt)
+- **Change**: Implemented 4 new user-facing features and completed major tech debt cleanup.
+- **DB changes** (Supabase SQL editor):
+  - `ALTER TABLE resident_units ADD COLUMN IF NOT EXISTS is_on_hold boolean DEFAULT false, ADD COLUMN IF NOT EXISTS hold_note text`
+  - `CREATE TABLE clock_events` (uuid PK, user_id, property_id, event_type CHECK IN ('clock_in','clock_out'), created_at) + RLS
+  - `CREATE TABLE worker_locations` (user_id PK, property_id, latitude, longitude, updated_at) + RLS
+- **Files Created**:
+  - `mobile/lib/features/resident/screens/resident_vacation_hold_screen.dart` — toggle is_on_hold on resident_units
+  - `mobile/lib/features/worker/screens/worker_earnings_screen.dart` — reads clock_events, computes weekly/monthly hours
+  - `mobile/lib/features/manager/screens/pm_compliance_report_screen.dart` — nightly_runs history, date range, CSV export via dart:html
+  - `mobile/lib/features/manager/screens/om_worker_map_screen.dart` — flutter_map + Supabase Realtime stream on worker_locations
+  - `mobile/.env.example` — onboarding template for new developers
+- **Files Modified**:
+  - `resident_dashboard_screen.dart` — added Vacation Hold tile in Profile tab
+  - `worker_dashboard_screen.dart` — _toggleDuty() persists to clock_events; _shareLocation() upserts to worker_locations; Earnings tile in Profile tab; Share Location button in Route tab; removed unused _propertyIds field
+  - `property_manager_dashboard_new.dart` — added Compliance Reports section in Settings tab
+  - `manager_dashboard_screen.dart` — added Live Worker Map button in Dashboard tab; deleted _legacyBuild() + _chip() + _actionTile() (569 lines)
+  - `property_manager_dashboard_new.dart` — deleted _buildLegacyDashboard() (298 lines)
+  - 23 dart files — replaced withOpacity() with withValues(alpha:) throughout (0 remaining)
+  - `test_connection_screen.dart` — fixed supabaseUrl/supabaseKey removed in v2 API
+- **Blocked**: supabase_flutter v1→v2 upgrade blocked by missing pub cache entries for app_links-7.0.0 and sign_in_with_apple_web; remains at v1.10.25.
+
 ### 2026-05-16 (Phase 1 Redesign)
 - **Change**: Implemented complete Phase 1 redesign foundation across 12 commits. App is now dark-first with a full design system.
 - **Files Created**:
@@ -105,6 +127,20 @@ Date | Change | Files Modified | Reason
 - **Files Modified**: Remote Supabase DB (applied via SQL editor in browser)
 - **Reason**: Bridge gaps between Flutter app expectations and DB schema after a prior iteration left incompatible objects.
 - **Pre-work required**: Dropped legacy `invite_codes` table (incompatible schema), dropped old `verify_invite_code` + `claim_invite_code` functions (incompatible return types).
+
+### 2026-05-16 (Session 6)
+- **Change**: Ran schema migrations, implemented light mode for PM/Owner, completed all 4 "free" features from session 5.
+- **DB changes** (Chrome automation → Supabase SQL editor):
+  - `ALTER TABLE missed_pickup_requests ADD COLUMN IF NOT EXISTS notes text, ADD COLUMN IF NOT EXISTS photo_url text`
+  - `ALTER TABLE properties ADD COLUMN IF NOT EXISTS latitude double precision, ADD COLUMN IF NOT EXISTS longitude double precision`
+- **Light mode implementation** (`property_manager` and `super_admin` roles now default to light theme):
+  - `core/theme/app_colors.dart` — added `AppColorsScheme` ThemeExtension (dark + light const instances) + `BuildContext.roleColors` extension
+  - `core/theme/app_theme.dart` — added `AppTheme.light` using FlexColorScheme.light; both themes register `AppColorsScheme` extension
+  - `valet_app.dart` — PM and Owner routes wrapped in `Theme(data: AppTheme.light, child: ...)`
+  - `property_manager_dashboard_new.dart` — `_c = context.roleColors` via `didChangeDependencies`; all surface/text color refs use `_c.*`
+  - `owner_dashboard_screen.dart` — same pattern; `_OwnerSectionLabel` uses `context.roleColors.textMuted`
+  - `core/widgets/stat_tile.dart` — uses `context.roleColors` (theme-aware, adapts to light/dark)
+  - `core/widgets/role_bottom_nav.dart` — uses `context.roleColors` (theme-aware)
 
 ### 2026-05-15
 - **Change**: Installed Repo OS brain scaffold (brain/, .cursor/rules/, cursor-os/, scripts/).
