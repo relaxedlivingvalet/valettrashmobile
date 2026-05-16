@@ -176,7 +176,7 @@ class _ManagerAlertsScreenState extends State<ManagerAlertsScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      const Text(
+                      Text(
                         'Create and send alerts to residents about service updates, cancellations, and important information.',
                         style: TextStyle(
                           fontSize: 16,

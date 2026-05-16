@@ -1,13 +1,12 @@
 # Current State
 
 ## Current Objective
-Phase 1 redesign foundation complete. App now has a dark design system, shared widget library, and redesigned auth screen. Next priority: Phase 2 — redesign all role-specific dashboards using the new shared widgets.
+**Redesign complete (Phases 1–5).** All 5 role dashboards now use the dark design system with consistent tab navigation, AppColors token system, and shared widgets. App builds cleanly with zero errors.
 
 ## Next Action
 ```powershell
-# Run the app (Flutter already on PATH):
+# Run the app:
 cd C:\Users\e159305\Projects\valettrashmobile\mobile
-# Use web-server device to control via Playwright, or chrome to open in system browser:
 flutter run -d web-server --web-port 8090 --no-pub
 # OR: flutter run -d chrome --no-pub
 ```
@@ -19,70 +18,51 @@ flutter run -d web-server --web-port 8090 --no-pub
   - All tables exist with correct schema, RLS enabled, SECURITY DEFINER RPCs in place
   - `violations` storage bucket created with RLS policies for residents and workers
   - Seed data applied (2026-05-16): property `10000000...0001` (Sunset Gardens), building, floor, unit 104, invite code `WELCOME104`
-  - `verify_invite_code('WELCOME104', '10000000-0000-0000-0000-000000000001', '104')` returns `is_valid=true` ✓
 
 - **Flutter mobile app** (`mobile/`)
-  - Status: **VERIFIED** — compiles, runs on Chrome, all 6 dashboards load with real data, resident signup flow end-to-end confirmed.
-  - Flutter SDK: `C:\Users\e159305\Apps\flutter\bin` (on user PATH, Flutter 3.41.9)
-  - Entry: `main.dart` → `ValetApp` (MaterialApp + AppTheme.dark) → `AuthGate` → role-based screen
-  - **Phase 1 redesign complete (2026-05-16)**:
-    - Design tokens: `core/theme/app_colors.dart`, `core/theme/app_typography.dart`, `core/theme/role_theme.dart`, `core/theme/app_theme.dart`
-    - Shared widgets: `core/widgets/glow_badge.dart`, `stat_tile.dart`, `skeleton_card.dart`, `role_hero_card.dart`, `primary_button.dart`, `role_bottom_nav.dart`
-    - Auth screen redesigned: dark background, DM Sans font, emerald accent, `flutter_animate` staggered entry
-    - Old files deleted: `core/brand_colors.dart`, `core/app_theme.dart`
-    - New packages: `shadcn_flutter`, `flex_color_scheme`, `google_fonts`, `flutter_animate`, `rive`, `lottie`, `fl_chart`, `shimmer`, `gap`, `phosphor_flutter`, `cached_network_image`
-    - 43 tests pass (1 pre-existing Supabase integration test requires live connection)
-  - Key screens: SimpleAuthScreen, ResidentSignupScreen, ResidentDashboardScreen, WorkerDashboardScreen, ViolationReportScreen, PropertyManagerDashboardNewScreen, OwnerDashboardScreen, ManagerDashboardScreen, TodayComebacksScreen
-  - **Compile fixes applied (2026-05-16)**:
-    - `manager_dashboard_screen.dart`, `property_manager_dashboard_new.dart`, `owner_dashboard_screen.dart`: `.inFilter()` → `.filter('col', 'in', '(...)')` (postgrest v1.5.2 compat)
-    - `manager_dashboard_screen.dart`, `property_manager_dashboard_new.dart`, `owner_dashboard_screen.dart`: `Future.wait([...])` → `Future.wait(<Future<dynamic>>[...])`
-    - `violation_report_screen.dart`: removed `dart:io` import, switched to `uploadBinary` + `file.readAsBytes()` + `file.name` (Flutter web compat)
-  - **Dashboard test results (2026-05-16)**:
-    - ✅ Resident Dashboard — all tabs load, notifications, violations, profile
-    - ✅ Worker Dashboard — shows assignment (Sunset Gardens), Clock In, Report Violation buttons
-    - ✅ Property Manager Dashboard — 1 property, 1 unit, 1 resident, service window, notify buttons
-    - ✅ Operations Manager Dashboard — Test Worker shown in assigned workers, 1 property, 1 worker
-    - ✅ Owner Dashboard — loads with real portfolio data (3 properties, 1 resident, 100% activation)
-    - ✅ Resident signup flow — full end-to-end: form → invite code validation → account creation → dashboard
-  - **Bug fixes applied (2026-05-16 session 4)**:
-    - `simple_auth_screen.dart`: wrapped Column in `Form(key: _formKey, ...)` — was missing, causing null crash on every sign-in attempt
-    - `valet_app.dart`: added `'operations_manager'` case to `RoleHome` switch + import for `ManagerDashboardScreen` — was unreachable via real auth
-    - Supabase DB: `ALTER TYPE user_role ADD VALUE 'operations_manager'` — enum was missing this value
-  - **Test accounts** (all password `TestPass123!`):
-    - `adam.grant824+res2@gmail.com` — resident, unit 104, Sunset Gardens
-    - `adam.grant824+pm@gmail.com` — property_manager, user_properties row for Sunset Gardens
-    - `adam.grant824+om@gmail.com` — operations_manager, user_properties row for Sunset Gardens
-    - `adam.grant824+worker@gmail.com` — driver, worker_assignments row for Sunset Gardens
+  - Status: **FULLY REDESIGNED** — compiles, all dashboards rebuilt with dark UI. Zero analyzer errors.
+  - Flutter SDK: `C:\Users\e159305\Apps\flutter\bin` (Flutter 3.41.9)
+  - Entry: `main.dart` → `ValetApp` → `AuthGate` → role-based screen
 
-- **Supabase migrations** (`supabase/migrations/`)
-  - Status: Applied to remote DB (done 2026-05-15 via SQL editor)
-  - 001: base schema, 004: RLS, 005: invites + user_properties + notifications fix, 006: storage
+  ### Design System (Phase 1 — complete)
+  - Tokens: `core/theme/app_colors.dart` — background, surface1/2, border, textPrimary/Secondary/Muted, role accents (resident=emerald, worker=amber, manager=indigo, owner=purple)
+  - Shared widgets: `glow_badge`, `stat_tile`, `skeleton_card`, `role_hero_card`, `primary_button`, `role_bottom_nav`
+  - Utility: `core/utils/page_transitions.dart` — `SharedAxisPageRoute` for animated screen pushes
+  - Lottie assets: `assets/lottie/success.json`, `assets/lottie/error.json`
+  - `core/widgets/lottie_feedback.dart` — `LottieSuccessView`, `LottieErrorView`
 
-- **Seed data**
-  - `010_seed_invite_codes.sql` — provides invite code `WELCOME104` (not yet confirmed applied to remote)
+  ### Role Dashboards (Phases 2–4 — complete)
+  - **Resident** (`resident_dashboard_screen.dart`): 4 tabs — Home (RoleHeroCard + stats + quick actions + notifications preview), History (pickup history), Alerts (notifications), Profile
+  - **Worker** (`worker_dashboard_screen.dart`): 4 tabs — Route (amber hero + Clock In/Out + stats), Comebacks, Violations (Report Violation → SharedAxisPageRoute → multi-step form + LottieSuccessView), Profile
+  - **Operations Manager** (`manager_dashboard_screen.dart`): 4 tabs — Dashboard (tonight's runs + comeback history), Workers (list with amber avatars), Comebacks (stats + View Full List), Notify (Alert All + 1 Resident)
+  - **Property Manager** (`property_manager_dashboard_new.dart`): 4 tabs — Portfolio (property cards), Residents (invite codes), Notify, Settings
+  - **Owner** (`owner_dashboard_screen.dart`): 4 tabs — Overview (KPI grid + property snapshots), Properties (detail cards), Analytics (occupancy bars + activation gauge), Settings (role switcher + sign out)
 
-- **Admin dashboard** (`admin_dashboard/`)
-  - Status: Scaffolded but not validated against current DB schema
+  ### Polish (Phase 5 — complete)
+  - `SharedAxisPageRoute` wired: Violation Report, Notification Sender, Comebacks
+  - `LottieSuccessView` used on violation submission success
+  - `animations` package: SharedAxisTransition utility in `core/utils/page_transitions.dart`
+  - All analyzer errors fixed including pre-existing `Icons.door_front` and `const Colors.grey.shade700`
 
-- **Stripe edge function** (`supabase/functions/stripe-webhook/`)
-  - Status: Scaffold only — not deployed
+  ### Key Technical Notes
+  - Supabase filter syntax: `.filter('col', 'in', '(${ids.join(',')})')` — not `.inFilter()` (v1 compat)
+  - `Future.wait(<Future<dynamic>>[...])` — typed generic required for Flutter web
+  - GlowBadge requires `accent` (required param) and `showDot` (default true)
 
-## In Progress / Likely Active Work
-- `main_simple.dart` — alternate entry point; purpose unclear, may be a dev artifact
+- **Test accounts** (all password `TestPass123!`):
+  - `adam.grant824+res2@gmail.com` — resident, unit 104, Sunset Gardens
+  - `adam.grant824+pm@gmail.com` — property_manager
+  - `adam.grant824+om@gmail.com` — operations_manager
+  - `adam.grant824+worker@gmail.com` — driver
 
-## Known Issues
-- `supabase_flutter` is pinned at v1.10.25 — v2 migration is a future breaking change (`.inFilter()` not available in v1; use `.filter('col', 'in', '(...)')` syntax)
-- No `.env` file committed — new developers need to create `mobile/.env` manually with `SUPABASE_URL` and `SUPABASE_ANON_KEY`
-- Supabase email confirmation is currently **disabled** — re-enable when a transactional email provider is configured
-- `flutter run -d chrome` opens a new system Chrome window each restart; use `flutter run -d web-server --web-port 8090` for Playwright-controlled testing
-
-## Open Questions
-- What is `main_simple.dart` used for — should it be removed?
-- Is OneSignal token collection planned for Phase 1 or Phase 2?
-- Does the admin dashboard target the same Supabase project?
-- Flutter is not installed on this machine — where is it installed / which machine will be used for device testing?
+- **Known Issues** (pre-existing, not introduced by redesign)
+  - `supabase_flutter` pinned at v1.10.25 — v2 migration is a future breaking change
+  - No `.env` committed — developers need `mobile/.env` with `SUPABASE_URL` and `SUPABASE_ANON_KEY`
+  - Supabase email confirmation disabled — re-enable when email provider configured
+  - `withOpacity` is deprecated in Flutter 3.x — use `.withValues(alpha: ...)` to silence warnings (info only, not errors)
+  - `_legacyBuild()` / `_buildLegacyDashboard()` in OM/PM files are dead code (warnings only)
 
 ## Resume Instructions
 1. Read this file first, then `brain/next_steps.md`
-2. `flutter run -d web-server --web-port 8090 --no-pub` from `mobile/` — serves at http://localhost:8090
-3. Next focus: Phase 2 — OneSignal push notifications, Stripe webhook, Twilio SMS
+2. `flutter run -d web-server --web-port 8090 --no-pub` from `mobile/`
+3. All redesign complete — next: push notifications, Stripe webhook, or OneSignal integration

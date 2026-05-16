@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'resident_notifications_screen.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/glow_badge.dart';
+import '../../../core/widgets/primary_button.dart';
+import '../../../core/widgets/role_bottom_nav.dart';
+import '../../../core/widgets/role_hero_card.dart';
+import '../../../core/widgets/skeleton_card.dart';
+import '../../../core/widgets/stat_tile.dart';
 import 'resident_violations_screen.dart';
 
 class ResidentDashboardScreen extends StatefulWidget {
   const ResidentDashboardScreen({super.key});
-
-  static const Color green = Color(0xFF00A86B);
-  static const Color dark = Color(0xFF0A1F1C);
-  static const Color bg = Color(0xFFF6F8F8);
 
   @override
   State<ResidentDashboardScreen> createState() =>
@@ -17,10 +19,12 @@ class ResidentDashboardScreen extends StatefulWidget {
 }
 
 class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
+  int _tabIndex = 0;
   bool _loading = true;
   String? _loadError;
 
   String _residentName = 'Resident';
+  String _email = '';
   String _propertyName = '';
   String _serviceDateStr = '--';
   String _windowShort = '--';
@@ -30,11 +34,18 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   int _violationsCount = 0;
   num _comebackFee = 15;
 
+  List<Map<String, dynamic>> _notifications = [];
+  bool _notifLoading = false;
+  bool _notifLoaded = false;
+
   @override
   void initState() {
     super.initState();
+    _email = Supabase.instance.client.auth.currentUser?.email ?? '';
     _load();
   }
+
+  // ── Data ────────────────────────────────────────────────────────────────────
 
   String _fmtTime(dynamic pgTime) {
     if (pgTime == null) return '--';
@@ -48,14 +59,16 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     return '$h12:${m.toString().padLeft(2, '0')} $ap';
   }
 
-  String _nextWindowPhrase(DateTime todayLocal, dynamic startStr, dynamic endStr) {
+  String _nextWindowPhrase(
+      DateTime todayLocal, dynamic startStr, dynamic endStr) {
     final startLbl = _fmtTime(startStr);
     final endLbl = _fmtTime(endStr);
     final partsStart = startStr.toString().split(':');
     if (partsStart.length < 2) return 'Window $startLbl – $endLbl';
     final sh = int.tryParse(partsStart[0]) ?? 18;
     final sm = int.tryParse(partsStart[1]) ?? 0;
-    var start = DateTime(todayLocal.year, todayLocal.month, todayLocal.day, sh, sm);
+    final start =
+        DateTime(todayLocal.year, todayLocal.month, todayLocal.day, sh, sm);
     if (todayLocal.isBefore(start)) {
       final mins = start.difference(todayLocal).inMinutes;
       if (mins < 60) return 'Starts in ${mins}m';
@@ -67,10 +80,9 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     if (partsEnd.length < 2) return 'In service until $endLbl';
     final eh = int.tryParse(partsEnd[0]) ?? 22;
     final em = int.tryParse(partsEnd[1]) ?? 0;
-    final end = DateTime(todayLocal.year, todayLocal.month, todayLocal.day, eh, em);
-    if (todayLocal.isBefore(end)) {
-      return 'In service until ${_fmtTime(endStr)}';
-    }
+    final end =
+        DateTime(todayLocal.year, todayLocal.month, todayLocal.day, eh, em);
+    if (todayLocal.isBefore(end)) return 'In service until ${_fmtTime(endStr)}';
     return 'Next window tomorrow $startLbl – $endLbl';
   }
 
@@ -119,11 +131,8 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       Map<String, dynamic>? assignmentMap;
       if (assignment != null) {
         assignmentMap = Map<String, dynamic>.from(assignment as Map);
-
-        dynamic propsRaw = assignmentMap['properties'];
-        if (propsRaw is Map) {
-          prop = Map<String, dynamic>.from(propsRaw);
-        }
+        final propsRaw = assignmentMap['properties'];
+        if (propsRaw is Map) prop = Map<String, dynamic>.from(propsRaw);
       }
 
       if (prop != null && assignmentMap != null) {
@@ -132,9 +141,8 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             ? prop['comeback_pickup_fee'] as num
             : 15;
         final freeCapRaw = prop['free_comeback_pickups_per_month'];
-        final freeCap = freeCapRaw is int
-            ? freeCapRaw
-            : int.tryParse('$freeCapRaw') ?? 0;
+        final freeCap =
+            freeCapRaw is int ? freeCapRaw : int.tryParse('$freeCapRaw') ?? 0;
         final now = DateTime.now();
         final monthStart =
             '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
@@ -154,10 +162,8 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
         final usedFree =
             usage == null ? 0 : (usage['free_comeback_used'] as int? ?? 0);
         final remain = freeCap - usedFree;
-        _freeRemain = remain < 0
-            ? 0
-            : (remain > freeCap ? freeCap : remain);
-
+        _freeRemain =
+            remain < 0 ? 0 : (remain > freeCap ? freeCap : remain);
         _freeSummary = freeCap <= 0
             ? 'No free comebacks configured'
             : '$_freeRemain of $freeCap left this month';
@@ -169,7 +175,6 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
         _countdownLabel = _nextWindowPhrase(now, startT, endT);
       }
 
-
       final viol = await Supabase.instance.client
           .from('violations')
           .select('id')
@@ -177,6 +182,9 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       _violationsCount = viol is List ? viol.length : 0;
 
       setState(() => _loading = false);
+
+      // Pre-load notifications for the preview card
+      if (!_notifLoaded) _loadNotifications();
     } catch (e) {
       setState(() {
         _loading = false;
@@ -185,524 +193,669 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     }
   }
 
-  void _openPage(BuildContext context, String title, Widget child) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SimplePage(title: title, child: child),
-      ),
-    );
+  Future<void> _loadNotifications() async {
+    if (_notifLoading) return;
+    setState(() => _notifLoading = true);
+    try {
+      final rows = await Supabase.instance.client
+          .from('notifications')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', ascending: false)
+          .limit(50);
+      _notifications = List<Map<String, dynamic>>.from(rows as List);
+      _notifLoaded = true;
+    } catch (_) {}
+    if (mounted) setState(() => _notifLoading = false);
   }
 
-  void _openSupportForm(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          left: 18,
-          right: 18,
-          top: 18,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 18,
-        ),
-        child: const SupportForm(),
-      ),
-    );
-  }
-
-  void _openBuyPickups(BuildContext context) {
-    _openPage(
-      context,
-      "Buy Extra Pickups",
-      Column(
-        children: const [
-          PickupPackage(title: "1 Extra Pickup", price: "\$5"),
-          PickupPackage(title: "3 Extra Pickups", price: "\$13"),
-          PickupPackage(title: "5 Extra Pickups", price: "\$20"),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _signOut(BuildContext context) async {
+  Future<void> _signOut(BuildContext ctx) async {
     await Supabase.instance.client.auth.signOut();
-    if (!context.mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    if (!ctx.mounted) return;
+    Navigator.of(ctx).popUntil((route) => route.isFirst);
   }
+
+  void _onTabChange(int index) {
+    setState(() => _tabIndex = index);
+    if (index == 2 && !_notifLoaded) _loadNotifications();
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: AppColors.surface1,
+      content: Text(msg, style: const TextStyle(color: AppColors.textPrimary)),
+    ));
+  }
+
+  // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ResidentDashboardScreen.bg,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView(
-                      padding: const EdgeInsets.all(18),
-                      children: [
-                        if (_loadError != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Text(
-                              _loadError!,
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        _header(context),
-                        const SizedBox(height: 20),
-                        _serviceCard(context),
-                        const SizedBox(height: 16),
-                        _statusRow(context),
-                        const SizedBox(height: 16),
-                        _quickActions(context),
-                        const SizedBox(height: 16),
-                        _services(context),
-                        const SizedBox(height: 16),
-                        _support(context),
-                      ],
-                    ),
+            Expanded(child: _buildTab()),
+            RoleBottomNav(
+              currentIndex: _tabIndex,
+              onTap: _onTabChange,
+              accent: AppColors.resident,
+              items: const [
+                RoleNavItem(
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home,
+                  label: 'Home',
+                ),
+                RoleNavItem(
+                  icon: Icons.history_outlined,
+                  activeIcon: Icons.history,
+                  label: 'History',
+                ),
+                RoleNavItem(
+                  icon: Icons.notifications_outlined,
+                  activeIcon: Icons.notifications,
+                  label: 'Alerts',
+                ),
+                RoleNavItem(
+                  icon: Icons.person_outline,
+                  activeIcon: Icons.person,
+                  label: 'Profile',
+                ),
+              ],
             ),
-            _bottomNav(context),
           ],
         ),
       ),
     );
   }
 
-  Widget _header(BuildContext context) {
+  Widget _buildTab() {
+    switch (_tabIndex) {
+      case 0:
+        return _buildHomeTab();
+      case 1:
+        return _buildHistoryTab();
+      case 2:
+        return _buildAlertsTab();
+      default:
+        return _buildProfileTab();
+    }
+  }
+
+  // ── Home ─────────────────────────────────────────────────────────────────────
+
+  Widget _buildHomeTab() {
+    if (_loading) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        children: const [
+          SkeletonCard(height: 52),
+          SizedBox(height: 20),
+          SkeletonCard(height: 128),
+          SizedBox(height: 12),
+          SkeletonCard(height: 60),
+          SizedBox(height: 16),
+          SkeletonCard(height: 110),
+          SizedBox(height: 16),
+          SkeletonCard(height: 70),
+        ],
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: AppColors.resident,
+      backgroundColor: AppColors.surface1,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        children: [
+          if (_loadError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: GlowBadge(
+                label: _loadError!,
+                accent: AppColors.error,
+                showDot: false,
+              ),
+            ),
+          _buildGreeting(),
+          const SizedBox(height: 20),
+          RoleHeroCard(
+            accent: AppColors.resident,
+            eyebrow: "TONIGHT'S SERVICE",
+            title: _propertyName.isEmpty
+                ? 'No Property Assigned'
+                : _propertyName,
+            subtitle: 'Window: $_windowShort',
+            badgeLabel: _countdownLabel,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              StatTile(value: '$_freeRemain', label: 'Comebacks Left'),
+              const SizedBox(width: 8),
+              StatTile(
+                value: '$_violationsCount',
+                label: 'Violations',
+                valueColor:
+                    _violationsCount > 0 ? AppColors.error : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildQuickActionsCard(),
+          if (_notifications.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildNotifPreview(_notifications.first),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGreeting() {
+    final initial =
+        _residentName.isNotEmpty ? _residentName[0].toUpperCase() : 'R';
     return Row(
       children: [
-        const CircleAvatar(radius: 28, backgroundColor: Colors.blue),
-        const SizedBox(width: 14),
+        CircleAvatar(
+          radius: 20,
+          backgroundColor: AppColors.resident.withOpacity(0.15),
+          child: Text(
+            initial,
+            style: TextStyle(
+              color: AppColors.resident,
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                "Welcome!",
+                'Good evening,',
                 style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: ResidentDashboardScreen.dark,
+                  fontSize: 11,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.5,
                 ),
               ),
-              Text(_residentName.toUpperCase()),
-              if (_propertyName.isNotEmpty)
-                Text(
-                  _propertyName,
-                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+              Text(
+                _residentName,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.3,
                 ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: ResidentDashboardScreen.green.withOpacity(.1),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: const Column(
-            children: [
-              Text("Worker Status"),
-              Row(
-                children: [
-                  CircleAvatar(radius: 4, backgroundColor: ResidentDashboardScreen.green),
-                  SizedBox(width: 6),
-                  Text(
-                    "SCHEDULED",
-                    style: TextStyle(
-                      color: ResidentDashboardScreen.green,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
               ),
             ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const ResidentNotificationsScreen(),
-              ),
-            );
-          },
-          child: const CircleAvatar(
-            backgroundColor: ResidentDashboardScreen.green,
-            child: Icon(Icons.notifications, color: Colors.white),
           ),
         ),
       ],
     );
   }
 
-  Widget _serviceCard(BuildContext context) {
-    final detail = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Upcoming service",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        Text("Date: $_serviceDateStr"),
-        Text("Service window: $_windowShort"),
-        Text(_countdownLabel),
-      ],
+  Widget _buildQuickActionsCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          _actionRow(
+            icon: Icons.replay_outlined,
+            iconColor: AppColors.resident,
+            title: 'Request Comeback',
+            subtitle: _freeRemain > 0
+                ? 'Free ($_freeRemain remaining)'
+                : 'Fees may apply — \$${_comebackFee.toStringAsFixed(0)}',
+            onTap: () => _snack('Comeback requests — coming soon'),
+          ),
+          Divider(height: 1, color: AppColors.border),
+          _actionRow(
+            icon: Icons.history_outlined,
+            iconColor: AppColors.textSecondary,
+            title: 'Service History',
+            subtitle: 'View past pickups',
+            onTap: () => _onTabChange(1),
+          ),
+          Divider(height: 1, color: AppColors.border),
+          _actionRow(
+            icon: Icons.warning_amber_outlined,
+            iconColor:
+                _violationsCount > 0 ? AppColors.error : AppColors.textMuted,
+            title: 'Violations',
+            subtitle: _violationsCount == 0
+                ? 'None on record'
+                : '$_violationsCount on record',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const ResidentViolationsScreen()),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Widget _actionRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () => _openPage(context, "Service details", detail),
-      child: _card(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            const Icon(Icons.calendar_month, size: 40, color: Colors.blue),
-            const SizedBox(width: 12),
+            Icon(icon, size: 20, color: iconColor),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _serviceDateStr,
+                    title,
                     style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(_windowShort),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                const Text("Tonight"),
-                Text(
-                  _countdownLabel,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: ResidentDashboardScreen.green,
-                  ),
-                  textAlign: TextAlign.right,
-                ),
-              ],
-            ),
+            const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
           ],
         ),
       ),
     );
   }
 
-  Widget _statusRow(BuildContext context) {
-    final feeLabel =
-        '\$${_comebackFee is int ? (_comebackFee as int).toString() : _comebackFee.toStringAsFixed(2)} after limit';
-
-    return Row(
-      children: [
-        Expanded(
-          child: _card(
-            color: ResidentDashboardScreen.green.withOpacity(.08),
+  Widget _buildNotifPreview(Map<String, dynamic> n) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.info.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child:
+                const Icon(Icons.notifications_outlined, size: 18, color: AppColors.info),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("FREE COMEBACKS"),
-                const SizedBox(height: 10),
                 Text(
-                  '$_freeRemain',
+                  n['title']?.toString() ?? 'Notification',
                   style: const TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Text(_freeSummary),
-                Text(feeLabel, style: const TextStyle(fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(
+                  n['message']?.toString() ?? '',
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ResidentViolationsScreen(),
-                ),
-              );
-            },
-            child: _card(
-              color: Colors.red.withOpacity(.08),
-              child: Column(
-                children: [
-                  const Text("VIOLATIONS"),
-                  const SizedBox(height: 10),
-                  Text(
-                    '$_violationsCount',
-                    style: const TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    _violationsCount == 0 ? 'Clear' : 'Review details',
-                  ),
-                ],
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _onTabChange(2),
+            child: Text(
+              'See all',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.resident,
+                fontWeight: FontWeight.w600,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── History ──────────────────────────────────────────────────────────────────
+
+  Widget _buildHistoryTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader('Service History'),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: const [ResidentPickupHistoryView()],
           ),
         ),
       ],
     );
   }
 
-  Widget _quickActions(BuildContext context) {
-    return _card(
-      child: Column(
-        children: [
-          _action(
-            context,
-            "Request pickup / comeback",
-            _freeRemain > 0
-                ? "Free (${_freeRemain} left this month)"
-                : "Fees may apply — see property rules",
-            Icons.event,
-            () => _openPage(
-              context,
-              "Request pickup",
-              const RequestPickupForm(),
+  // ── Alerts ───────────────────────────────────────────────────────────────────
+
+  Widget _buildAlertsTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader('Notifications'),
+        if (_notifLoading)
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: const [
+                SkeletonCard(height: 72),
+                SizedBox(height: 10),
+                SkeletonCard(height: 72),
+                SizedBox(height: 10),
+                SkeletonCard(height: 72),
+                SizedBox(height: 10),
+                SkeletonCard(height: 72),
+              ],
             ),
-          ),
-          _action(
-            context,
-            "Service history",
-            "Recent pickups",
-            Icons.history,
-            () => _openPage(
-              context,
-              "Service history",
-              const ResidentPickupHistoryView(),
-            ),
-          ),
-          _action(
-            context,
-            "Buy extra pickups",
-            "Purchase pickups / comebacks",
-            Icons.shopping_cart,
-            () => _openBuyPickups(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _services(BuildContext context) {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Available services",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                  child: _serviceTile(
-                      context, "Moving Service", Icons.local_shipping)),
-              const SizedBox(width: 10),
-              Expanded(
-                child:
-                    _serviceTile(context, "Maid Service", Icons.cleaning_services),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                  child:
-                      _serviceTile(context, "Bulk Trash Pickup", Icons.delete)),
-              const SizedBox(width: 10),
-              Expanded(
-                child:
-                    _serviceTile(context, "More services", Icons.more_horiz),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _support(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () => _openSupportForm(context),
-      child: _card(
-        child: Row(
-          children: [
-            const Icon(Icons.support_agent),
-            const SizedBox(width: 10),
-            const Expanded(
-              child:
-                  Text("Questions or concerns? We’re here to help"),
-            ),
-            ElevatedButton(
-              onPressed: () => _openSupportForm(context),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: ResidentDashboardScreen.green),
-              child: const Text("Message"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _card({required Widget child, Color color = Colors.white}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: child,
-    );
-  }
-
-  Widget _action(
-    BuildContext context,
-    String title,
-    String subtitle,
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    return ListTile(
-      onTap: onTap,
-      leading: Icon(icon, color: ResidentDashboardScreen.green),
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-    );
-  }
-
-  Widget _serviceTile(BuildContext context, String label, IconData icon) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () => _openPage(
-        context,
-        label,
-        ServiceRequestPage(serviceName: label),
-      ),
-      child: Container(
-        height: 120,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: Colors.grey.shade100,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: ResidentDashboardScreen.green, size: 34),
-            const SizedBox(height: 8),
-            Text(label, textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _bottomNav(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: ResidentDashboardScreen.dark,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _navItem(context, Icons.home, "Home", () {}),
-          _navItem(
-            context,
-            Icons.grid_view,
-            "Extras",
-            () => _openPage(
-              context,
-              "Extra services",
-              const Text(
-                "Moving, maid service, bulk pickup — request via property office.",
-              ),
-            ),
-          ),
-          _navItem(
-            context,
-            Icons.support,
-            "Support",
-            () => _openSupportForm(context),
-          ),
-          _navItem(
-            context,
-            Icons.person,
-            "Profile",
-            () => _openPage(
-              context,
-              "Profile",
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          )
+        else if (_notifications.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Signed in as\n${_residentName.isNotEmpty ? _residentName : 'Resident'}',
-                      style: const TextStyle(fontSize: 16)),
-                  const SizedBox(height: 24),
-                  OutlinedButton(
-                    onPressed: () => _signOut(context),
-                    child: const Text('Sign out'),
+                  const Icon(Icons.notifications_off_outlined,
+                      size: 48, color: AppColors.textMuted),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'No notifications yet',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 14),
                   ),
                 ],
               ),
             ),
+          )
+        else
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _loadNotifications,
+              color: AppColors.resident,
+              backgroundColor: AppColors.surface1,
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                itemCount: _notifications.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (context, i) =>
+                    _buildNotifCard(_notifications[i]),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildNotifCard(Map<String, dynamic> n) {
+    final typeColor = _notifTypeColor(n['type']?.toString() ?? '');
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: typeColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              _notifTypeIcon(n['type']?.toString() ?? ''),
+              size: 18,
+              color: typeColor,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  n['title']?.toString() ?? 'Notification',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  n['message']?.toString() ?? '',
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _navItem(
-    BuildContext context,
-    IconData icon,
-    String label,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white),
-          const SizedBox(height: 4),
-          Text(label,
-              style: const TextStyle(color: Colors.white, fontSize: 12)),
-        ],
+  Color _notifTypeColor(String type) {
+    switch (type) {
+      case 'violation':
+        return AppColors.error;
+      case 'pickup_scheduled':
+      case 'pickup_completed':
+        return AppColors.success;
+      case 'warning':
+        return AppColors.warning;
+      default:
+        return AppColors.info;
+    }
+  }
+
+  IconData _notifTypeIcon(String type) {
+    switch (type) {
+      case 'violation':
+        return Icons.warning_amber_outlined;
+      case 'pickup_scheduled':
+        return Icons.schedule_outlined;
+      case 'pickup_completed':
+        return Icons.check_circle_outline;
+      default:
+        return Icons.notifications_outlined;
+    }
+  }
+
+  // ── Profile ──────────────────────────────────────────────────────────────────
+
+  Widget _buildProfileTab() {
+    final initial =
+        _residentName.isNotEmpty ? _residentName[0].toUpperCase() : 'R';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader('Profile'),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surface1,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: AppColors.resident.withOpacity(0.15),
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          color: AppColors.resident,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _residentName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _email,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GlowBadge(
+                      label: 'Resident',
+                      accent: AppColors.resident,
+                    ),
+                  ],
+                ),
+              ),
+              if (_propertyName.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface1,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'PROPERTY',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _propertyName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Service window: $_windowShort',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _freeSummary,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Sign Out',
+                onPressed: () => _signOut(context),
+                accent: AppColors.error,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textPrimary,
+          letterSpacing: -0.5,
+        ),
       ),
     );
   }
 }
 
-/// Loads recent pickups for the authenticated resident.
+// ── Pickup history widget (preserved) ────────────────────────────────────────
+
 class ResidentPickupHistoryView extends StatelessWidget {
   const ResidentPickupHistoryView({super.key});
 
@@ -723,46 +876,128 @@ class ResidentPickupHistoryView extends StatelessWidget {
     return s.replaceAll('_', ' ');
   }
 
+  Color _statusColor(String? s) {
+    switch (s) {
+      case 'completed':
+        return AppColors.success;
+      case 'missed':
+      case 'cancelled':
+        return AppColors.error;
+      default:
+        return AppColors.info;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _fetchPickups(),
       builder: (context, snap) {
         if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Column(
+            children: [
+              SkeletonCard(height: 66),
+              SizedBox(height: 10),
+              SkeletonCard(height: 66),
+              SizedBox(height: 10),
+              SkeletonCard(height: 66),
+              SizedBox(height: 10),
+              SkeletonCard(height: 66),
+              SizedBox(height: 10),
+              SkeletonCard(height: 66),
+              SizedBox(height: 10),
+              SkeletonCard(height: 66),
+            ],
+          );
         }
         final list = snap.data!;
         if (list.isEmpty) {
-          return const Text('No pickup history yet.');
-        }
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: list.length,
-          itemBuilder: (context, i) {
-            final row = list[i];
-            final u = row['units'];
-            String unit = '?';
-            if (u is Map && u['unit_number'] != null) {
-              unit = '${u['unit_number']}';
-            }
-            final when = row['completed_at'] ?? row['created_at'];
-            return ListTile(
-              leading: Icon(
-                row['status'] == 'completed'
-                    ? Icons.check_circle
-                    : Icons.schedule,
-                color: ResidentDashboardScreen.green,
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.history_outlined,
+                      size: 48, color: AppColors.textMuted),
+                  SizedBox(height: 12),
+                  Text(
+                    'No pickup history yet',
+                    style: TextStyle(
+                        color: AppColors.textMuted, fontSize: 14),
+                  ),
+                ],
               ),
-              title: Text(_prettyStatus(row['status'] as String?)),
-              subtitle: Text('Unit $unit · $when'),
+            ),
+          );
+        }
+        return Column(
+          children: list.asMap().entries.map((entry) {
+            final row = entry.value;
+            final u = row['units'];
+            final unit = (u is Map && u['unit_number'] != null)
+                ? '${u['unit_number']}'
+                : '?';
+            final when =
+                row['completed_at'] ?? row['created_at'] ?? '';
+            final status = row['status'] as String?;
+            final color = _statusColor(status);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.surface1,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _prettyStatus(status).toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: color,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Unit $unit · $when',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
-          },
+          }).toList(),
         );
       },
     );
   }
 }
+
+// ── Legacy helper classes (kept for compatibility) ────────────────────────────
 
 class SimplePage extends StatelessWidget {
   final String title;
@@ -773,186 +1008,16 @@ class SimplePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ResidentDashboardScreen.bg,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: ResidentDashboardScreen.dark,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.surface1,
+        foregroundColor: AppColors.textPrimary,
         title: Text(title),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(18),
         child: child,
       ),
-    );
-  }
-}
-
-class SupportForm extends StatefulWidget {
-  const SupportForm({super.key});
-
-  @override
-  State<SupportForm> createState() => _SupportFormState();
-}
-
-class _SupportFormState extends State<SupportForm> {
-  String category = "Missed pickup";
-  final _messageCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _messageCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text(
-          "Send message",
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        DropdownButtonFormField<String>(
-          value: category,
-          decoration: const InputDecoration(
-            labelText: "Category",
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(
-                value: "Missed pickup", child: Text("Missed pickup")),
-            DropdownMenuItem(value: "Billing", child: Text("Billing")),
-            DropdownMenuItem(
-                value: "Violation question",
-                child: Text("Violation question")),
-            DropdownMenuItem(
-                value: "Extra service", child: Text("Extra service")),
-            DropdownMenuItem(value: "Other", child: Text("Other")),
-          ],
-          onChanged: (value) => setState(() => category = value!),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _messageCtrl,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            labelText: "Message",
-            hintText: "Type your concern here...",
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: ResidentDashboardScreen.green,
-              padding: const EdgeInsets.all(14),
-            ),
-            child: const Text("Close"),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class RequestPickupForm extends StatelessWidget {
-  const RequestPickupForm({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Request a missed pickup or comeback.",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        SizedBox(height: 12),
-        Text(
-          "Property staff will coordinate based on tonight’s route. "
-          "For urgent issues, contact the office from Support.",
-        ),
-        SizedBox(height: 24),
-      ],
-    );
-  }
-}
-
-class PickupPackage extends StatelessWidget {
-  final String title;
-  final String price;
-
-  const PickupPackage({super.key, required this.title, required this.price});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        title: Text(title),
-        subtitle: const Text("Extra pickup package"),
-        trailing: Text(
-          price,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("$title — checkout coming soon.")),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class ServiceRequestPage extends StatelessWidget {
-  final String serviceName;
-
-  const ServiceRequestPage({super.key, required this.serviceName});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Request $serviceName",
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        const TextField(
-          decoration: InputDecoration(
-            labelText: "Preferred date",
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const TextField(
-          decoration: InputDecoration(
-            labelText: "Notes",
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 18),
-        ElevatedButton(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content:
-                    Text("$serviceName — request forwarded to property team."),
-              ),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: ResidentDashboardScreen.green,
-          ),
-          child: const Text("Submit"),
-        ),
-      ],
     );
   }
 }

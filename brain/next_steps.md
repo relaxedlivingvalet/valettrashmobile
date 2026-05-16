@@ -17,40 +17,33 @@
 - [x] Created PM, OM, and worker test accounts with proper `user_properties`/`worker_assignments` rows
 - [x] Verified all 5 role dashboards with real Supabase data (PM, OM, Worker, Resident, Owner)
 
-## Completed (2026-05-16 — Phase 1 Redesign)
-- [x] Installed redesign package stack (shadcn_flutter, flex_color_scheme, flutter_animate, shimmer, etc.)
-- [x] Built design token layer: AppColors, AppTypography (DM Sans), RoleTheme, AppTheme.dark
-- [x] Built shared widget library: GlowBadge, StatTile, SkeletonCard, RoleHeroCard, PrimaryButton, RoleBottomNav
-- [x] Wired dark theme via MaterialApp + flex_color_scheme
-- [x] Redesigned SimpleAuthScreen with dark fields, emerald accent, flutter_animate entry animations
-- [x] 43 unit/widget tests passing; all committed across 12 commits
+## Completed — Full Redesign (Phases 1–5) (2026-05-16)
+- [x] Phase 1: Design token system (AppColors, AppTypography, AppTheme.dark), shared widget library (GlowBadge, StatTile, SkeletonCard, RoleHeroCard, PrimaryButton, RoleBottomNav)
+- [x] Phase 2: ResidentDashboardScreen — 4-tab dark redesign (Home, History, Alerts, Profile)
+- [x] Phase 3: WorkerDashboardScreen — 4-tab dark redesign (Route, Comebacks, Violations, Profile)
+- [x] Phase 3: ViolationReportScreen — multi-step form (photo → type → details → confirm) with LottieSuccessView on submit
+- [x] Phase 4: PropertyManagerDashboardNewScreen — 4-tab dark redesign (Portfolio, Residents/Codes, Notify, Settings)
+- [x] Phase 4: ManagerDashboardScreen (OM) — 4-tab dark redesign (Dashboard, Workers, Comebacks, Notify)
+- [x] Phase 4: OwnerDashboardScreen — 4-tab dark redesign (Overview, Properties, Analytics, Settings)
+- [x] Phase 5: SharedAxisPageRoute — smooth horizontal screen transitions wired into Violation Report, Comebacks, Notification Sender
+- [x] Phase 5: Lottie assets created (success.json, error.json) + LottieSuccessView/LottieErrorView widgets
+- [x] Phase 5: All analyzer errors fixed — zero errors, clean build
 
-## Now (Phase 2 — Screen Redesigns)
-- [ ] Write `docs/superpowers/plans/2026-05-16-redesign-phase2-screens.md`
-- [ ] Redesign ResidentDashboardScreen using RoleHeroCard + StatTile + RoleBottomNav
-- [ ] Redesign WorkerDashboardScreen using RoleHeroCard + SkeletonCard + RoleBottomNav
-- [ ] Redesign PropertyManagerDashboardNewScreen using RoleHeroCard + StatTile + RoleBottomNav
-- [ ] Redesign ManagerDashboardScreen (Operations Manager) using same widget system
-- [ ] Redesign OwnerDashboardScreen using RoleHeroCard + StatTile grid
+## Now — Feature Development
+- [ ] OneSignal push notifications — collect device token on login, store in `users` table or dedicated `push_tokens` table, send from edge functions
+- [ ] Stripe webhook edge function — `supabase functions deploy stripe-webhook` + set `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` env secrets
+- [ ] Twilio SMS integration — pickup reminders for residents
+- [ ] Mapbox route mapping for WorkerDashboard — show tonight's route on a map
 
-## Next
-- [ ] Confirm admin_dashboard targets the correct Supabase project and schema
-- [ ] Clarify `main_simple.dart` — remove it or document its purpose
-- [ ] Test ViolationReportScreen: photo pick → upload to `violations/workers/<uid>/...` → insert violations row
-
-## Phase 2 Backlog
-- [ ] Wire up OneSignal push notifications (collect token on login, store in users table or dedicated table)
-- [ ] Deploy Stripe webhook edge function: `supabase functions deploy stripe-webhook` + set `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` secrets
-- [ ] Twilio SMS integration for pickup reminders
-- [ ] Mapbox route mapping for WorkerDashboardScreen
-- [ ] Stripe Connect for contractor payouts
+## Technical Debt / Improvements
+- [ ] Replace `withOpacity()` with `.withValues(alpha: ...)` throughout to fix deprecation warnings
+- [ ] Remove `_legacyBuild()` and `_buildLegacyDashboard()` dead code from OM/PM dashboard files
+- [ ] Upgrade `supabase_flutter` from v1.10.25 to v2 (plan carefully — many breaking changes)
+- [ ] Add `.env.example` file so new developers know required variables
+- [ ] Add integration tests for the invite code flow
+- [ ] Clarify `main_simple.dart` — remove or document purpose
+- [ ] Confirm admin_dashboard targets the correct Supabase project
 
 ## Blocked / Waiting
 - Stripe integration blocked on Stripe account setup and webhook secret
 - OneSignal blocked on OneSignal app ID / account setup
-
-## Suggested Improvements
-- [ ] Upgrade `supabase_flutter` from v1.10.25 to v2 (breaking change — plan carefully)
-- [ ] Add a `.env.example` file so new developers know required variables
-- [ ] Add integration tests for the invite code flow
-- [ ] Consider adding `supabase db pull` to CI to detect schema drift

@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/glow_badge.dart';
+import '../../../core/widgets/primary_button.dart';
+import '../../../core/widgets/role_bottom_nav.dart';
+import '../../../core/widgets/role_hero_card.dart';
+import '../../../core/widgets/skeleton_card.dart';
+import '../../../core/widgets/stat_tile.dart';
 import 'simple_notification_sender_screen.dart';
 
 class PropertyManagerDashboardNewScreen extends StatefulWidget {
@@ -15,6 +23,8 @@ class _PropertyManagerDashboardNewScreenState
   bool _loading = true;
   String? _error;
   String _email = '';
+
+  int _tabIndex = 0;
 
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _inviteCodes = [];
@@ -53,7 +63,7 @@ class _PropertyManagerDashboardNewScreenState
     final floors = await client
         .from('floors')
         .select('id')
-        .inFilter('building_id', buildingIds);
+        .filter('building_id', 'in', '(${buildingIds.join(',')})');
     final floorIds = (floors as List)
         .map((f) => f['id']?.toString())
         .whereType<String>()
@@ -63,7 +73,7 @@ class _PropertyManagerDashboardNewScreenState
     final units = await client
         .from('units')
         .select('id')
-        .inFilter('floor_id', floorIds)
+        .filter('floor_id', 'in', '(${floorIds.join(',')})')
         .eq('is_active', true);
     return (units as List).length;
   }
@@ -83,7 +93,7 @@ class _PropertyManagerDashboardNewScreenState
     final floors = await client
         .from('floors')
         .select('id')
-        .inFilter('building_id', buildingIds);
+        .filter('building_id', 'in', '(${buildingIds.join(',')})');
     final floorIds = (floors as List)
         .map((f) => f['id']?.toString())
         .whereType<String>()
@@ -93,7 +103,7 @@ class _PropertyManagerDashboardNewScreenState
     final units = await client
         .from('units')
         .select('id')
-        .inFilter('floor_id', floorIds)
+        .filter('floor_id', 'in', '(${floorIds.join(',')})')
         .eq('is_active', true);
     return (units as List)
         .map((u) => u['id']?.toString())
@@ -131,7 +141,7 @@ class _PropertyManagerDashboardNewScreenState
         final propId = propData['id']?.toString() ?? '';
         final propName = propData['name']?.toString() ?? '';
 
-        final results = await Future.wait([
+        final results = await Future.wait(<Future<dynamic>>[
           client
               .from('resident_units')
               .select('id')
@@ -159,7 +169,7 @@ class _PropertyManagerDashboardNewScreenState
           final violations = await client
               .from('violations')
               .select('id')
-              .inFilter('unit_id', unitIds)
+              .filter('unit_id', 'in', '(${unitIds.join(',')})')
               .eq('status', 'pending');
           violationCount = (violations as List).length;
         }
@@ -226,6 +236,596 @@ class _PropertyManagerDashboardNewScreenState
       ),
     );
   }
+
+  // ── Build ────────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(child: _buildTab()),
+            RoleBottomNav(
+              currentIndex: _tabIndex,
+              onTap: (i) => setState(() => _tabIndex = i),
+              accent: AppColors.manager,
+              items: const [
+                RoleNavItem(
+                  icon: Icons.apartment_outlined,
+                  activeIcon: Icons.apartment,
+                  label: 'Portfolio',
+                ),
+                RoleNavItem(
+                  icon: Icons.people_outline,
+                  activeIcon: Icons.people,
+                  label: 'Residents',
+                ),
+                RoleNavItem(
+                  icon: Icons.notifications_outlined,
+                  activeIcon: Icons.notifications,
+                  label: 'Notify',
+                ),
+                RoleNavItem(
+                  icon: Icons.settings_outlined,
+                  activeIcon: Icons.settings,
+                  label: 'Settings',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTab() {
+    switch (_tabIndex) {
+      case 0:
+        return _buildPortfolioTab();
+      case 1:
+        return _buildResidentsTab();
+      case 2:
+        return _buildNotifyTab();
+      default:
+        return _buildSettingsTab();
+    }
+  }
+
+  // ── Portfolio tab ─────────────────────────────────────────────────────────────
+
+  Widget _buildPortfolioTab() {
+    if (_loading) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        children: const [
+          SkeletonCard(height: 128),
+          SizedBox(height: 12),
+          SkeletonCard(height: 60),
+          SizedBox(height: 16),
+          SkeletonCard(height: 110),
+          SizedBox(height: 16),
+          SkeletonCard(height: 110),
+        ],
+      );
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GlowBadge(label: _error!, accent: AppColors.error, showDot: false),
+            const SizedBox(height: 16),
+            TextButton(onPressed: _loadData, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+    if (_properties.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.apartment_outlined, size: 56, color: AppColors.textMuted),
+            SizedBox(height: 16),
+            Text(
+              'No properties assigned',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'A super admin must assign you to a property.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      color: AppColors.manager,
+      backgroundColor: AppColors.surface1,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+        children: [
+          RoleHeroCard(
+            accent: AppColors.manager,
+            eyebrow: 'PORTFOLIO',
+            title: '${_properties.length} Propert${_properties.length == 1 ? 'y' : 'ies'}',
+            subtitle: '$_totalResidents residents · $_totalUnits units',
+            badgeLabel: 'Property Manager',
+            showDot: false,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              StatTile(value: '$_totalUnits', label: 'Units'),
+              const SizedBox(width: 8),
+              StatTile(value: '$_totalResidents', label: 'Residents'),
+              const SizedBox(width: 8),
+              StatTile(
+                value: '$_totalViolations',
+                label: 'Violations',
+                valueColor: _totalViolations > 0 ? AppColors.error : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          ..._properties.map((p) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildPropertyCard(p),
+              )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPropertyCard(Map<String, dynamic> p) {
+    final violations = p['violation_count'] as int? ?? 0;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p['name']?.toString() ?? 'Property',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      p['service_window']?.toString() ?? '--',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (violations > 0)
+                GlowBadge(
+                  label: '$violations violations',
+                  accent: AppColors.error,
+                  showDot: true,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _miniStat(
+                    '${p['unit_count'] ?? 0}', 'Units', AppColors.info),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _miniStat(
+                    '${p['resident_count'] ?? 0}', 'Residents', AppColors.manager),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _miniStat(
+                    '${p['claimed_count'] ?? 0}/${p['invite_count'] ?? 0}',
+                    'Codes',
+                    AppColors.warning),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _openNotificationSender(
+                    propertyId: p['id']?.toString(),
+                    mode: 'property',
+                  ),
+                  icon: const Icon(Icons.campaign_outlined, size: 16),
+                  label: const Text('Alert All'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.manager,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _openNotificationSender(
+                    propertyId: p['id']?.toString(),
+                    mode: 'user',
+                  ),
+                  icon: const Icon(Icons.person_outline, size: 16),
+                  label: const Text('1 Resident'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniStat(String value, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 7,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Residents tab ─────────────────────────────────────────────────────────────
+
+  Widget _buildResidentsTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Residents & Codes',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+              GlowBadge(
+                label: '$_claimedCodes / ${_inviteCodes.length} claimed',
+                accent: AppColors.manager,
+                showDot: false,
+              ),
+            ],
+          ),
+        ),
+        if (_loading)
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: const [
+                SkeletonCard(height: 66),
+                SizedBox(height: 10),
+                SkeletonCard(height: 66),
+                SizedBox(height: 10),
+                SkeletonCard(height: 66),
+              ],
+            ),
+          )
+        else if (_inviteCodes.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.vpn_key_outlined,
+                      size: 48, color: AppColors.textMuted),
+                  SizedBox(height: 12),
+                  Text(
+                    'No invite codes issued yet',
+                    style:
+                        TextStyle(color: AppColors.textMuted, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              color: AppColors.manager,
+              backgroundColor: AppColors.surface1,
+              child: ListView.separated(
+                padding:
+                    const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                itemCount: _inviteCodes.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: 10),
+                itemBuilder: (context, i) =>
+                    _buildCodeCard(_inviteCodes[i]),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCodeCard(Map<String, dynamic> item) {
+    final isUsed = item['assigned_user_id'] != null;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.manager.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.vpn_key_outlined,
+                size: 18, color: AppColors.manager),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item['code']?.toString() ?? '--',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item['property_name']?.toString() ?? '',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GlowBadge(
+            label: isUsed ? 'Claimed' : 'Active',
+            accent: isUsed ? AppColors.success : AppColors.manager,
+            showDot: !isUsed,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Notify tab ───────────────────────────────────────────────────────────────
+
+  Widget _buildNotifyTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Text(
+            'Send Notifications',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: [
+              RoleHeroCard(
+                accent: AppColors.manager,
+                eyebrow: 'COMMUNICATION',
+                title: 'Resident Alerts',
+                subtitle:
+                    'Send property-wide or individual notifications to residents',
+                badgeLabel: 'Property Manager',
+                showDot: false,
+              ),
+              const SizedBox(height: 20),
+              PrimaryButton(
+                label: 'Alert All Residents',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const SimpleNotificationSenderScreen(
+                            initialMode: 'property'),
+                  ),
+                ),
+                accent: AppColors.manager,
+                icon: Icons.campaign_outlined,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const SimpleNotificationSenderScreen(
+                            initialMode: 'user'),
+                  ),
+                ),
+                icon: const Icon(Icons.person_outline, size: 18),
+                label: const Text('Notify Specific Resident'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Settings tab ──────────────────────────────────────────────────────────────
+
+  Widget _buildSettingsTab() {
+    final initial = _email.isNotEmpty ? _email[0].toUpperCase() : 'M';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Text(
+            'Settings',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surface1,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: AppColors.manager.withOpacity(0.15),
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          color: AppColors.manager,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _email,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_properties.length} propert${_properties.length == 1 ? 'y' : 'ies'}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GlowBadge(
+                      label: 'PM',
+                      accent: AppColors.manager,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Sign Out',
+                onPressed: _signOut,
+                accent: AppColors.error,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Legacy UI helpers (kept for internal use) ────────────────────────────────
 
   Widget _sectionCard({
     required String title,
@@ -431,8 +1031,8 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  // old build removed — replaced by tabbed version above
+  Widget _buildLegacyDashboard(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(

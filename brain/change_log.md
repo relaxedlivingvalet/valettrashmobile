@@ -31,6 +31,26 @@ Date | Change | Files Modified | Reason
 - **Tests**: 43 unit/widget tests passing. Pre-existing widget_test.dart requires live Supabase (expected failure).
 - **Reason**: 2026 redesign initiative — dark-first, role-accented, premium valet service aesthetic.
 
+### 2026-05-16 (Phases 2–5 — Full Dashboard Redesign)
+- **Change**: Complete dark redesign of all 5 role dashboards. Each screen now has 4-tab bottom navigation, role-accented hero cards, stat tiles, skeleton loading, and dark surface system. Phase 5 polish adds Lottie animations and SharedAxisTransition page transitions.
+- **Files Created**:
+  - `mobile/lib/core/utils/page_transitions.dart` — `SharedAxisPageRoute` using `animations` package
+  - `mobile/lib/core/widgets/lottie_feedback.dart` — `LottieSuccessView` + `LottieErrorView` widgets
+  - `mobile/assets/lottie/success.json` — minimal Lottie success animation (circle + checkmark)
+  - `mobile/assets/lottie/error.json` — minimal Lottie error animation (red circle + X with shake)
+- **Files Rewritten**:
+  - `mobile/lib/features/resident/screens/resident_dashboard_screen.dart` — 4-tab layout (Home/History/Alerts/Profile), emerald accent, pre-loads notifications
+  - `mobile/lib/features/worker/screens/worker_dashboard_screen.dart` — 4-tab layout (Route/Comebacks/Violations/Profile), amber accent, SharedAxisPageRoute for Violation Report
+  - `mobile/lib/features/worker/screens/violation_report_screen.dart` — multi-step wizard (0=photo, 1=type, 2=details, 3=confirm), LottieSuccessView on submit
+  - `mobile/lib/features/owner/screens/owner_dashboard_screen.dart` — 4-tab layout (Overview/Properties/Analytics/Settings), purple accent, occupancy bars, role switcher
+- **Files Significantly Modified**:
+  - `mobile/lib/features/manager/screens/manager_dashboard_screen.dart` — added 4-tab layout; _DarkSectionLabel class added; SharedAxisPageRoute wired for Comebacks + Notify nav
+  - `mobile/lib/features/manager/screens/property_manager_dashboard_new.dart` — added 4-tab layout; `Icons.door_front` → `Icons.meeting_room` fix
+  - `mobile/lib/features/manager/screens/manager_alerts_screen.dart` — `const Text` with `.shade700` → non-const fix
+  - `mobile/lib/features/manager/screens/property_manager_dashboard_screen.dart` — `Icons.door_front` → `Icons.meeting_room` fix
+- **Result**: Zero analyzer errors, clean `flutter build web` output.
+- **Reason**: Full redesign per spec in `docs/superpowers/specs/2026-05-16-valet-app-redesign-design.md`.
+
 ### 2026-05-16 (session 4)
 - **Change**: Fixed two bugs blocking auth; added `operations_manager` to DB enum; created 3 test accounts; verified all 5 role-based dashboards with real data.
 - **Files Modified**:

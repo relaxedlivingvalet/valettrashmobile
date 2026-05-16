@@ -1,16 +1,19 @@
-import 'dart:io' show File, Platform;
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/glow_badge.dart';
+import '../../../core/widgets/lottie_feedback.dart';
+import '../../../core/widgets/primary_button.dart';
+
 /// Maps to Postgres enum `violation_type`.
 final List<Map<String, String>> kViolationDbTypes = [
-  {'value': 'too_many_bags', 'label': 'Too many bags'},
-  {'value': 'untied_bags', 'label': 'Untied bags'},
-  {'value': 'leaking_bags', 'label': 'Leaking bags'},
-  {'value': 'prohibited_items', 'label': 'Prohibited items'},
-  {'value': 'outside_rules', 'label': 'Outside rules'},
+  {'value': 'too_many_bags', 'label': 'Too Many Bags'},
+  {'value': 'untied_bags', 'label': 'Untied Bags'},
+  {'value': 'leaking_bags', 'label': 'Leaking Bags'},
+  {'value': 'prohibited_items', 'label': 'Prohibited Items'},
+  {'value': 'outside_rules', 'label': 'Outside Rules'},
 ];
 
 class ViolationReportScreen extends StatefulWidget {
@@ -25,8 +28,10 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
   final _descriptionController = TextEditingController();
   final _picker = ImagePicker();
 
+  int _step = 0; // 0=photo, 1=type, 2=details, 3=confirm
   String _selectedViolationType = kViolationDbTypes.first['value']!;
   bool _isLoading = false;
+  bool _submitted = false;
   XFile? _image;
 
   @override
@@ -36,11 +41,7 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
     super.dispose();
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
+  // ── Data ─────────────────────────────────────────────────────────────────────
 
   Future<void> _pickPhoto(ImageSource src) async {
     final picked = await _picker.pickImage(source: src, maxWidth: 1600);
@@ -50,25 +51,21 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
   Future<String?> _uploadPhoto(String workerId) async {
     final file = _image;
     if (file == null) return null;
-    final shortName = file.path.split(Platform.pathSeparator).last;
     final name =
-        '${DateTime.now().millisecondsSinceEpoch}_$shortName'.replaceAll(' ', '');
+        '${DateTime.now().millisecondsSinceEpoch}_${file.name}'.replaceAll(' ', '');
     final path = 'workers/$workerId/$name';
+    final bytes = await file.readAsBytes();
     await Supabase.instance.client.storage
         .from('violations')
-        .upload(path, File(file.path), fileOptions: const FileOptions(upsert: true));
+        .uploadBinary(path, bytes,
+            fileOptions: const FileOptions(upsert: true));
     return path;
   }
 
   Future<void> _submitViolation() async {
     final unitNumber = _unitController.text.trim();
     if (unitNumber.isEmpty) {
-      _showMessage('Please enter a unit number');
-      return;
-    }
-
-    if (_descriptionController.text.trim().isEmpty) {
-      _showMessage('Please enter a description');
+      _snackError('Please enter a unit number');
       return;
     }
 
@@ -78,7 +75,7 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
       final supabase = Supabase.instance.client;
       final currentUser = supabase.auth.currentUser;
       if (currentUser == null) {
-        _showMessage('Sign in required');
+        _snackError('Sign in required');
         return;
       }
 
@@ -87,12 +84,12 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
           .select('property_id')
           .eq('user_id', currentUser.id)
           .eq('is_active', true);
-      final plist =
-          List<Map<String, dynamic>>.from(assigns as List).map((e) {
-        return e['property_id']?.toString();
-      }).whereType<String>().toSet();
+      final plist = List<Map<String, dynamic>>.from(assigns as List)
+          .map((e) => e['property_id']?.toString())
+          .whereType<String>()
+          .toSet();
       if (plist.isEmpty) {
-        _showMessage('No property assignment — contact dispatch.');
+        _snackError('No property assignment — contact dispatch.');
         return;
       }
 
@@ -114,8 +111,7 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
         }
       }
       if (unitId == null) {
-        _showMessage(
-            'Unit not found or not on your assigned properties.');
+        _snackError('Unit not found on your assigned properties.');
         return;
       }
 
@@ -126,7 +122,7 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
           .eq('is_active', true)
           .maybeSingle();
       if (ru == null || ru['user_id'] == null) {
-        _showMessage('No active resident mapped to this unit.');
+        _snackError('No active resident mapped to this unit.');
         return;
       }
       final residentId = ru['user_id'].toString();
@@ -157,141 +153,645 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
         'status': 'pending',
       });
 
-      _showMessage('Violation reported successfully!');
-      _unitController.clear();
-      _descriptionController.clear();
-      setState(() => _image = null);
+      setState(() => _submitted = true);
+
+      await Future.delayed(const Duration(seconds: 2));
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      _showMessage('Failed to report violation: $e');
+      _snackError('Failed to report violation: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  void _snackError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: AppColors.error.withOpacity(0.9),
+      content: Text(msg, style: const TextStyle(color: Colors.white)),
+    ));
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.surface1,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
         title: const Text(
-          'Report violation',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          'Report Violation',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
         ),
-        backgroundColor: Colors.red.shade700,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        shadowColor: Colors.black26,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: AppColors.textSecondary),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      body: _submitted ? _buildSuccessView() : _buildStepView(),
+    );
+  }
+
+  Widget _buildSuccessView() {
+    return const LottieSuccessView(
+      message: 'Violation Reported',
+      subtitle: 'The resident has been notified.',
+    );
+  }
+
+  Widget _buildStepView() {
+    return SafeArea(
+      child: Column(
+        children: [
+          _buildStepIndicator(),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+              child: _buildCurrentStep(),
+            ),
+          ),
+          _buildStepNavigation(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepIndicator() {
+    final steps = ['Photo', 'Type', 'Details', 'Confirm'];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(
+            bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: steps.asMap().entries.map((entry) {
+          final i = entry.key;
+          final label = entry.value;
+          final isActive = i == _step;
+          final isDone = i < _step;
+          return Expanded(
+            child: Row(
+              children: [
+                Column(
                   children: [
-                    const Text(
-                      'Document the condition at the door per property rules.',
-                      style: TextStyle(fontSize: 15),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _selectedViolationType,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'Violation type',
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: isDone
+                            ? AppColors.success
+                            : isActive
+                                ? AppColors.error
+                                : AppColors.surface2,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isActive
+                              ? AppColors.error
+                              : isDone
+                                  ? AppColors.success
+                                  : AppColors.border,
+                        ),
                       ),
-                      items: kViolationDbTypes
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e['value'],
-                              child: Text(e['label']!),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          setState(() => _selectedViolationType = v);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _unitController,
-                      decoration: const InputDecoration(
-                        labelText: 'Unit number',
-                        border: OutlineInputBorder(),
+                      child: Center(
+                        child: isDone
+                            ? const Icon(Icons.check,
+                                size: 14, color: Colors.white)
+                            : Text(
+                                '${i + 1}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isActive
+                                      ? Colors.white
+                                      : AppColors.textMuted,
+                                ),
+                              ),
                       ),
-                      keyboardType: TextInputType.text,
                     ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _descriptionController,
-                      maxLines: 4,
-                      decoration: const InputDecoration(
-                        labelText: 'Description',
-                        border: OutlineInputBorder(),
+                    const SizedBox(height: 4),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight:
+                            isActive ? FontWeight.w700 : FontWeight.w400,
+                        color: isActive
+                            ? AppColors.error
+                            : isDone
+                                ? AppColors.success
+                                : AppColors.textMuted,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                if (i < steps.length - 1)
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      color: isDone ? AppColors.success : AppColors.border,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildCurrentStep() {
+    switch (_step) {
+      case 0:
+        return _buildPhotoStep();
+      case 1:
+        return _buildTypeStep();
+      case 2:
+        return _buildDetailsStep();
+      default:
+        return _buildConfirmStep();
+    }
+  }
+
+  // Step 0 — Photo
+  Widget _buildPhotoStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Add Photo',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Take or upload a photo of the violation. A photo helps document the issue clearly.',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 24),
+        // Photo preview or placeholder
+        if (_image != null)
+          Container(
+            height: 180,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.surface2,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppColors.success, width: 2),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.image_outlined,
+                    size: 40, color: AppColors.success),
+                const SizedBox(height: 8),
+                Text(
+                  _image!.name,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                GlowBadge(
+                  label: 'Photo selected',
+                  accent: AppColors.success,
+                  showDot: true,
+                ),
+              ],
+            ),
+          )
+        else
+          Container(
+            height: 180,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.surface2,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppColors.border, style: BorderStyle.solid),
+            ),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add_a_photo_outlined,
+                    size: 40, color: AppColors.textMuted),
+                SizedBox(height: 8),
+                Text(
+                  'No photo selected',
+                  style: TextStyle(
+                      fontSize: 13, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _pickPhoto(ImageSource.camera),
+                icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                label: const Text('Camera'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.worker,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _pickPhoto(ImageSource.gallery),
+                icon: const Icon(Icons.photo_library_outlined, size: 18),
+                label: const Text('Gallery'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.worker,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Photo is optional but strongly recommended.',
+          style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  // Step 1 — Violation type
+  Widget _buildTypeStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Violation Type',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Select the category that best describes the violation.',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 24),
+        ...kViolationDbTypes.map((vt) {
+          final isSelected = _selectedViolationType == vt['value'];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: InkWell(
+              onTap: () =>
+                  setState(() => _selectedViolationType = vt['value']!),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppColors.error.withOpacity(0.08)
+                      : AppColors.surface1,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected
+                        ? AppColors.error.withOpacity(0.5)
+                        : AppColors.border,
+                    width: isSelected ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppColors.error
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected
+                              ? AppColors.error
+                              : AppColors.textMuted,
+                          width: 2,
+                        ),
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check,
+                              size: 12, color: Colors.white)
+                          : null,
+                    ),
+                    const SizedBox(width: 14),
+                    Text(
+                      vt['label']!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: isSelected
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _isLoading
-                      ? null
-                      : () => _pickPhoto(ImageSource.camera),
-                  icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('Photo (camera)'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _isLoading
-                      ? null
-                      : () => _pickPhoto(ImageSource.gallery),
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('Photo (gallery)'),
-                ),
-              ],
+          );
+        }),
+      ],
+    );
+  }
+
+  // Step 2 — Details
+  Widget _buildDetailsStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Details',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Enter the unit number and any additional notes.',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'UNIT NUMBER',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _unitController,
+          style: const TextStyle(
+              color: AppColors.textPrimary, fontSize: 14),
+          keyboardType: TextInputType.text,
+          decoration: InputDecoration(
+            hintText: 'e.g. 104',
+            hintStyle:
+                const TextStyle(color: AppColors.textMuted, fontSize: 14),
+            filled: true,
+            fillColor: AppColors.surface2,
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.border),
             ),
-            if (_image != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _image!.path.split('/').last,
-                  style: const TextStyle(fontSize: 12),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide:
+                  const BorderSide(color: AppColors.error, width: 1.5),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'NOTES (OPTIONAL)',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _descriptionController,
+          style: const TextStyle(
+              color: AppColors.textPrimary, fontSize: 14),
+          maxLines: 4,
+          decoration: InputDecoration(
+            hintText: 'Describe the condition...',
+            hintStyle:
+                const TextStyle(color: AppColors.textMuted, fontSize: 14),
+            filled: true,
+            fillColor: AppColors.surface2,
+            contentPadding: const EdgeInsets.all(16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide:
+                  const BorderSide(color: AppColors.error, width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Step 3 — Confirm
+  Widget _buildConfirmStep() {
+    final typeLabel = kViolationDbTypes
+        .firstWhere((t) => t['value'] == _selectedViolationType,
+            orElse: () => {'label': _selectedViolationType})['label']!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Confirm & Submit',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Review the details before submitting.',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _summaryRow('Violation Type', typeLabel),
+        _summaryRow('Unit Number', _unitController.text.trim().isEmpty
+            ? 'Not specified'
+            : _unitController.text.trim()),
+        _summaryRow(
+            'Notes',
+            _descriptionController.text.trim().isEmpty
+                ? 'None'
+                : _descriptionController.text.trim()),
+        _summaryRow('Photo', _image != null ? 'Attached' : 'None'),
+        const SizedBox(height: 24),
+        if (_unitController.text.trim().isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: GlowBadge(
+              label: 'Unit number is required',
+              accent: AppColors.error,
+              showDot: false,
+            ),
+          ),
+        PrimaryButton(
+          label: 'Submit Report',
+          onPressed: _isLoading ||
+                  _unitController.text.trim().isEmpty
+              ? null
+              : _submitViolation,
+          accent: AppColors.error,
+          isLoading: _isLoading,
+          icon: Icons.send_outlined,
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface1,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
+                label.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: AppColors.textMuted,
                 ),
               ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _submitViolation,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade700,
-                  foregroundColor: Colors.white,
+            ),
+            Expanded(
+              flex: 3,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
                 ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child:
-                            CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Submit report'),
+                textAlign: TextAlign.right,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Step navigation ───────────────────────────────────────────────────────────
+
+  Widget _buildStepNavigation() {
+    final isLastStep = _step == 3;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: [
+          if (_step > 0)
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => setState(() => _step--),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Back'),
+              ),
+            ),
+          if (_step > 0) const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: isLastStep
+                ? PrimaryButton(
+                    label: 'Submit Report',
+                    onPressed: _isLoading ||
+                            _unitController.text.trim().isEmpty
+                        ? null
+                        : _submitViolation,
+                    accent: AppColors.error,
+                    isLoading: _isLoading,
+                  )
+                : PrimaryButton(
+                    label: _step == 0 && _image == null ? 'Skip Photo' : 'Continue',
+                    onPressed: () => setState(() => _step++),
+                    accent: AppColors.worker,
+                  ),
+          ),
+        ],
       ),
     );
   }

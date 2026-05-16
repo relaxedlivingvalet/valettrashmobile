@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/page_transitions.dart';
+import '../../../core/widgets/glow_badge.dart';
+import '../../../core/widgets/primary_button.dart';
+import '../../../core/widgets/role_bottom_nav.dart';
+import '../../../core/widgets/role_hero_card.dart';
+import '../../../core/widgets/skeleton_card.dart';
+import '../../../core/widgets/stat_tile.dart';
 import 'violation_report_screen.dart';
 
 class WorkerDashboardScreen extends StatefulWidget {
@@ -11,23 +19,23 @@ class WorkerDashboardScreen extends StatefulWidget {
 }
 
 class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
+  int _tabIndex = 0;
   bool _loading = true;
-  String _email = 'No user signed in';
+  String _email = '';
   bool _isOnDuty = false;
-  String _assignedProperty = 'No property assignment';
+  String _assignedProperty = 'No property assigned';
   String _assignedRoute = 'No active route';
   List<Map<String, dynamic>> _comebackRequests = [];
-  List<Map<String, dynamic>> _assignedIssues = [];
+  Set<String> _propertyIds = {};
 
   @override
   void initState() {
     super.initState();
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      _email = user.email ?? user.id;
-    }
+    _email = Supabase.instance.client.auth.currentUser?.email ?? '';
     _loadRouteData();
   }
+
+  // ── Data ─────────────────────────────────────────────────────────────────────
 
   Future<void> _loadRouteData() async {
     final client = Supabase.instance.client;
@@ -43,21 +51,17 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
           .select('property_id, properties(name)')
           .eq('user_id', user.id)
           .eq('is_active', true);
-      final assignList =
-          List<Map<String, dynamic>>.from(assigns as List);
+      final assignList = List<Map<String, dynamic>>.from(assigns as List);
       final names = <String>[];
       final propertyIds = <String>{};
       for (final row in assignList) {
         final p = row['properties'];
-        if (p is Map && p['name'] != null) {
-          names.add('${p['name']}');
-        }
+        if (p is Map && p['name'] != null) names.add('${p['name']}');
         final pid = row['property_id']?.toString();
         if (pid != null) propertyIds.add(pid);
       }
-      if (names.isNotEmpty) {
-        _assignedProperty = names.join(', ');
-      }
+      if (names.isNotEmpty) _assignedProperty = names.join(', ');
+      _propertyIds = propertyIds;
 
       final routes = await client
           .from('routes')
@@ -76,8 +80,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
         final nums = stopList
             .map((s) {
               final u = s['units'];
-              if (u is Map) return u['unit_number']?.toString();
-              return null;
+              return u is Map ? u['unit_number']?.toString() : null;
             })
             .whereType<String>()
             .toList();
@@ -88,8 +91,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       final rawComebacks = await client
           .from('missed_pickup_requests')
           .select(
-            'id, status, requested_at, pickups(units(unit_number), nightly_runs(property_id))',
-          )
+              'id, status, requested_at, pickups(units(unit_number), nightly_runs(property_id))')
           .limit(80);
       final cbList = List<Map<String, dynamic>>.from(rawComebacks as List);
       _comebackRequests = [];
@@ -97,8 +99,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
         final p = row['pickups'];
         if (p is! Map) continue;
         final nr = p['nightly_runs'];
-        final propId =
-            nr is Map ? nr['property_id']?.toString() : null;
+        final propId = nr is Map ? nr['property_id']?.toString() : null;
         if (propId != null && !propertyIds.contains(propId)) continue;
         final u = p['units'];
         final unit = u is Map ? u['unit_number']?.toString() ?? '?' : '?';
@@ -110,62 +111,11 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
           'status': row['status']?.toString() ?? 'pending',
         });
       }
-
-      _assignedIssues = [];
     } catch (_) {
       _comebackRequests = [];
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-
-  Future<void> _refresh() async {
-    await _loadRouteData();
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  Future<void> _signOut() async {
-    await Supabase.instance.client.auth.signOut();
-    if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
-  void _toggleDutyStatus() {
-    setState(() {
-      _isOnDuty = !_isOnDuty;
-    });
-    _showMessage(_isOnDuty ? 'You are now on duty' : 'You are now off duty');
-  }
-
-  void _startService() {
-    if (!_isOnDuty) {
-      _showMessage('Please mark yourself on duty first');
-      return;
-    }
-    _showMessage('Service started for $_assignedProperty');
-  }
-
-  void _completeService() {
-    if (!_isOnDuty) {
-      _showMessage('Please mark yourself on duty first');
-      return;
-    }
-    _showMessage('Service completed for $_assignedProperty');
-  }
-
-  void _reportViolation() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const ViolationReportScreen(),
-      ),
-    );
   }
 
   Future<void> _completeComebackRequest(int index) async {
@@ -176,528 +126,465 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
         await Supabase.instance.client
             .from('missed_pickup_requests')
             .update({
-              'status': 'completed',
-              'completed_at': DateTime.now().toUtc().toIso8601String(),
-            })
-            .eq('id', id);
+          'status': 'completed',
+          'completed_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', id);
       } catch (_) {}
     }
     if (mounted) {
       setState(() => _comebackRequests.removeAt(index));
-      _showMessage('Comeback request completed successfully!');
+      _snack('Comeback completed');
     }
   }
+
+  Future<void> _signOut() async {
+    await Supabase.instance.client.auth.signOut();
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  void _toggleDuty() {
+    setState(() => _isOnDuty = !_isOnDuty);
+    _snack(_isOnDuty ? 'You are now on duty' : 'You are now off duty');
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: AppColors.surface1,
+      content: Text(msg, style: const TextStyle(color: AppColors.textPrimary)),
+    ));
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text('Worker Dashboard'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: _loading ? null : _refresh,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh routes',
-          ),
-          IconButton(
-            onPressed: _signOut,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign Out',
-          ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _refresh,
-              child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
         child: Column(
           children: [
-            // Status Card
-            Card(
-              child: Padding(
+            Expanded(child: _buildTab()),
+            RoleBottomNav(
+              currentIndex: _tabIndex,
+              onTap: (i) => setState(() => _tabIndex = i),
+              accent: AppColors.worker,
+              items: const [
+                RoleNavItem(
+                  icon: Icons.map_outlined,
+                  activeIcon: Icons.map,
+                  label: 'Route',
+                ),
+                RoleNavItem(
+                  icon: Icons.replay_outlined,
+                  activeIcon: Icons.replay,
+                  label: 'Comebacks',
+                ),
+                RoleNavItem(
+                  icon: Icons.warning_amber_outlined,
+                  activeIcon: Icons.warning_amber,
+                  label: 'Violations',
+                ),
+                RoleNavItem(
+                  icon: Icons.person_outline,
+                  activeIcon: Icons.person,
+                  label: 'Profile',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTab() {
+    switch (_tabIndex) {
+      case 0:
+        return _buildRouteTab();
+      case 1:
+        return _buildComebacksTab();
+      case 2:
+        return _buildViolationsTab();
+      default:
+        return _buildProfileTab();
+    }
+  }
+
+  // ── Route ─────────────────────────────────────────────────────────────────────
+
+  Widget _buildRouteTab() {
+    if (_loading) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        children: const [
+          SkeletonCard(height: 140),
+          SizedBox(height: 12),
+          SkeletonCard(height: 60),
+          SizedBox(height: 16),
+          SkeletonCard(height: 56),
+        ],
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadRouteData,
+      color: AppColors.worker,
+      backgroundColor: AppColors.surface1,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        children: [
+          RoleHeroCard(
+            accent: AppColors.worker,
+            eyebrow: "TONIGHT'S ROUTE",
+            title: _assignedProperty,
+            subtitle: _assignedRoute == 'No active route'
+                ? 'No route assigned'
+                : _assignedRoute.length > 60
+                    ? '${_assignedRoute.substring(0, 60)}…'
+                    : _assignedRoute,
+            badgeLabel: _isOnDuty ? 'On Duty' : 'Off Duty',
+            showDot: _isOnDuty,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              StatTile(
+                value: '${_comebackRequests.length}',
+                label: 'Comebacks',
+                valueColor: _comebackRequests.isNotEmpty
+                    ? AppColors.error
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              StatTile(
+                value: _isOnDuty ? 'Active' : 'Idle',
+                label: 'Status',
+                valueColor: _isOnDuty ? AppColors.worker : AppColors.textMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          PrimaryButton(
+            label: _isOnDuty ? 'Clock Out' : 'Clock In',
+            onPressed: _toggleDuty,
+            accent: _isOnDuty ? AppColors.error : AppColors.worker,
+            icon: _isOnDuty ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+          ),
+          if (!_isOnDuty) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Clock in to begin your route for tonight.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Comebacks ─────────────────────────────────────────────────────────────────
+
+  Widget _buildComebacksTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Comebacks',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+              if (_comebackRequests.isNotEmpty)
+                GlowBadge(
+                  label: '${_comebackRequests.length} pending',
+                  accent: AppColors.warning,
+                  showDot: true,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_loading)
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: const [
+                SkeletonCard(height: 70),
+                SizedBox(height: 10),
+                SkeletonCard(height: 70),
+                SizedBox(height: 10),
+                SkeletonCard(height: 70),
+              ],
+            ),
+          )
+        else if (_comebackRequests.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.check_circle_outline,
+                      size: 48, color: AppColors.success),
+                  SizedBox(height: 12),
+                  Text(
+                    'No comeback requests',
+                    style: TextStyle(
+                        color: AppColors.textMuted, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _loadRouteData,
+              color: AppColors.worker,
+              backgroundColor: AppColors.surface1,
+              child: ListView.separated(
+                padding:
+                    const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                itemCount: _comebackRequests.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: 10),
+                itemBuilder: (context, i) =>
+                    _buildComebackCard(i, _comebackRequests[i]),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildComebackCard(int index, Map<String, dynamic> req) {
+    final unit = req['unit']?.toString() ?? '?';
+    final time = req['time']?.toString() ?? '';
+    final status = req['status']?.toString() ?? 'pending';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.warning.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.home_outlined,
+              size: 20,
+              color: AppColors.warning,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Unit $unit',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  time.length > 16 ? time.substring(0, 16) : time,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (status != 'completed')
+            TextButton(
+              onPressed: () => _completeComebackRequest(index),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.success,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+              ),
+              child: const Text(
+                'Complete',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            )
+          else
+            GlowBadge(
+              label: 'Done',
+              accent: AppColors.success,
+              showDot: false,
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Violations ────────────────────────────────────────────────────────────────
+
+  Widget _buildViolationsTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader('Violations'),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: [
+              RoleHeroCard(
+                accent: AppColors.worker,
+                eyebrow: 'DOCUMENTATION',
+                title: 'Report a Violation',
+                subtitle:
+                    'Photograph and document rule violations per property policy',
+                badgeLabel: 'Worker',
+                showDot: false,
+              ),
+              const SizedBox(height: 20),
+              PrimaryButton(
+                label: 'Report Violation',
+                onPressed: () => Navigator.push(
+                  context,
+                  SharedAxisPageRoute(
+                    builder: (_) => const ViolationReportScreen(),
+                  ),
+                ),
+                accent: AppColors.error,
+                icon: Icons.camera_alt_outlined,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Document any rule violations with a photo, violation type, '
+                'and unit number. Residents are notified automatically.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Profile ───────────────────────────────────────────────────────────────────
+
+  Widget _buildProfileTab() {
+    final initial = _email.isNotEmpty ? _email[0].toUpperCase() : 'W';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader('Profile'),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: [
+              Container(
                 padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surface1,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
                 child: Row(
                   children: [
-                    Icon(
-                      _isOnDuty ? Icons.work : Icons.work_off,
-                      color: _isOnDuty ? Colors.green : Colors.red,
-                      size: 32,
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: AppColors.worker.withOpacity(0.15),
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          color: AppColors.worker,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 20,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Worker Status',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          Text(
-                            _isOnDuty ? 'On Duty' : 'Off Duty',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: _isOnDuty ? Colors.green : Colors.red,
+                            _email,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: _toggleDutyStatus,
-                      icon: Icon(
-                        _isOnDuty ? Icons.work_off : Icons.work,
-                        size: 18,
-                      ),
-                      label: Text(_isOnDuty ? 'Clock Out' : 'Clock In'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isOnDuty ? Colors.red : Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Assignment Card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.location_on,
-                          color: Colors.blue,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            'Assignment',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Property',
-                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                           const SizedBox(height: 4),
                           Text(
                             _assignedProperty,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.info,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Route',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _assignedRoute,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.info,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Service Actions
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _startService,
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    label: const Text('Start Service'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _completeService,
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Complete Service'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _reportViolation,
-                    icon: const Icon(Icons.warning, size: 18),
-                    label: const Text('Report Violation'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Comeback Requests
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.refresh,
-                          color: Colors.orange,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            'Comeback Requests',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${_comebackRequests.length}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.orange.shade800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_comebackRequests.isEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: const Text(
-                          'No comeback requests',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    else
-                      ..._comebackRequests.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final request = entry.value;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.textSecondary,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.home,
-                                size: 16,
-                                color: AppColors.textSecondary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Unit ${request['unit']} - ${request['type']}',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                request['time'],
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: () => _completeComebackRequest(index),
-                                icon: const Icon(Icons.check, size: 16),
-                                label: const Text('Complete'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green.shade600,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Assigned Issues
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.purple.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.note_alt,
-                            color: Colors.purple.shade700,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        const Expanded(
-                          child: Text(
-                            'Notes & Issues',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.purple.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${_assignedIssues.length}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.purple.shade800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_assignedIssues.isEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: const Text(
-                          'No assigned issues',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    else
-                      ..._assignedIssues.map((item) => Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: item['priority'] == 'high' 
-                              ? Colors.red.shade50 
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: item['priority'] == 'high' 
-                                ? Colors.red.shade200 
-                                : Colors.grey.shade200,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  item['type'] == 'Issue' 
-                                      ? Icons.warning 
-                                      : Icons.note,
-                                  size: 16,
-                                  color: item['priority'] == 'high' 
-                                      ? Colors.red.shade600 
-                                      : Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Unit ${item['unit']} - ${item['type']}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: item['priority'] == 'high' 
-                                          ? Colors.red.shade800 
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  item['time'],
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (item['description'] != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                item['description'],
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      )),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Debug Info Card
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Worker Info',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Email: $_email',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    Text(
-                      'Status: ${_isOnDuty ? "On Duty" : "Off Duty"}',
-                      style: TextStyle(color: Colors.grey.shade600),
+                    GlowBadge(
+                      label: _isOnDuty ? 'On Duty' : 'Off Duty',
+                      accent: _isOnDuty ? AppColors.worker : AppColors.textMuted,
+                      showDot: _isOnDuty,
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Sign Out',
+                onPressed: _signOut,
+                accent: AppColors.error,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textPrimary,
+          letterSpacing: -0.5,
         ),
       ),
-            ),
     );
   }
 }

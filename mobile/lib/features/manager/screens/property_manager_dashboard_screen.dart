@@ -246,7 +246,7 @@ class _PropertyManagerDashboardScreenState extends State<PropertyManagerDashboar
                     Row(
                       children: [
                         Expanded(
-                          child: _buildMetricCard('Total Units', '$_totalUnits', Icons.door_front),
+                          child: _buildMetricCard('Total Units', '$_totalUnits', Icons.meeting_room),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
