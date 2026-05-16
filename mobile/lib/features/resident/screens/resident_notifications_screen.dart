@@ -25,10 +25,10 @@ class _ResidentNotificationsScreenState extends State<ResidentNotificationsScree
       final currentUser = supabase.auth.currentUser;
       
       if (currentUser != null) {
-        // Load notifications for current user using complex targeting
         final notifications = await supabase
             .from('notifications')
             .select('*')
+            .eq('is_active', true)
             .order('created_at', ascending: false)
             .limit(50);
         
@@ -263,52 +263,12 @@ class _ResidentNotificationsScreenState extends State<ResidentNotificationsScree
   }
 
   Widget _buildNotificationsList() {
-    final supabase = Supabase.instance.client;
-    final currentUser = supabase.auth.currentUser;
-    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 800),
         child: Column(
-          children: [
-            // Debug Info
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'DEBUG INFO:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Current User ID: ${currentUser?.id ?? 'Not signed in'}'),
-                  Text('Notifications Returned: ${_notifications.length}'),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Targeting: user_id OR property_id OR global',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Notifications
-            ..._notifications.map((notification) => _buildNotificationCard(notification)).toList(),
-          ],
+          children: _notifications.map((n) => _buildNotificationCard(n)).toList(),
         ),
       ),
     );
@@ -323,33 +283,25 @@ class _ResidentNotificationsScreenState extends State<ResidentNotificationsScree
     MaterialColor color;
     
     switch (type) {
-      case 'cancellation':
+      case 'pickup_reminder':
         icon = Icons.warning;
         color = Colors.orange;
         break;
-      case 'holiday':
-        icon = Icons.event_busy;
-        color = Colors.red;
-        break;
-      case 'completed':
+      case 'team_arrived':
         icon = Icons.check_circle;
         color = Colors.green;
         break;
-      case 'reminder':
-        icon = Icons.home;
-        color = Colors.blue;
-        break;
-      case 'info':
-        icon = Icons.info;
-        color = Colors.purple;
-        break;
-      case 'alert':
+      case 'violation_reported':
         icon = Icons.notifications_active;
         color = Colors.red;
         break;
+      case 'billing_alert':
+        icon = Icons.receipt;
+        color = Colors.purple;
+        break;
       default:
         icon = Icons.info;
-        color = Colors.grey;
+        color = Colors.blue;
     }
 
     return Container(

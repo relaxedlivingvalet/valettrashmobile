@@ -29,7 +29,7 @@ class _ResidentViolationsScreenState extends State<ResidentViolationsScreen> {
         final violations = await supabase
             .from('violations')
             .select('*')
-            .eq('user_id', currentUser.id)
+            .eq('resident_user_id', currentUser.id)
             .order('created_at', ascending: false);
         
         setState(() {
@@ -201,7 +201,7 @@ class _ResidentViolationsScreenState extends State<ResidentViolationsScreen> {
     final type = _getViolationTypeDisplay(violation['violation_type']);
     final description = violation['description'] ?? 'No description available';
     final date = _formatDate(violation['created_at']);
-    final isCharged = violation['status'] == 'charged';
+    final isCharged = (violation['is_warning'] == false);
     final photoUrl = violation['photo_url'];
 
     return Container(

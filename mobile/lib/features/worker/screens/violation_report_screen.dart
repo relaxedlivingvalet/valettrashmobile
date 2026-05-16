@@ -1,5 +1,17 @@
+import 'dart:io' show File, Platform;
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// Maps to Postgres enum `violation_type`.
+final List<Map<String, String>> kViolationDbTypes = [
+  {'value': 'too_many_bags', 'label': 'Too many bags'},
+  {'value': 'untied_bags', 'label': 'Untied bags'},
+  {'value': 'leaking_bags', 'label': 'Leaking bags'},
+  {'value': 'prohibited_items', 'label': 'Prohibited items'},
+  {'value': 'outside_rules', 'label': 'Outside rules'},
+];
 
 class ViolationReportScreen extends StatefulWidget {
   const ViolationReportScreen({super.key});
@@ -11,18 +23,11 @@ class ViolationReportScreen extends StatefulWidget {
 class _ViolationReportScreenState extends State<ViolationReportScreen> {
   final _unitController = TextEditingController();
   final _descriptionController = TextEditingController();
-  String _selectedViolationType = 'improper_disposal';
-  bool _isLoading = false;
-  String? _photoPath;
+  final _picker = ImagePicker();
 
-  final List<Map<String, String>> _violationTypes = [
-    {'value': 'improper_disposal', 'label': 'Improper Waste Disposal'},
-    {'value': 'overflow', 'label': 'Bin Overflow'},
-    {'value': 'contamination', 'label': 'Contamination'},
-    {'value': 'missed_service', 'label': 'Missed Service Area'},
-    {'value': 'blocking', 'label': 'Blocking Service Access'},
-    {'value': 'other', 'label': 'Other'},
-  ];
+  String _selectedViolationType = kViolationDbTypes.first['value']!;
+  bool _isLoading = false;
+  XFile? _image;
 
   @override
   void dispose() {
@@ -37,16 +42,27 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
     );
   }
 
-  Future<void> _capturePhoto() async {
-    // Mock photo capture - in real app would use camera/image_picker
-    _showMessage('Photo capture feature - mock implementation');
-    setState(() {
-      _photoPath = 'mock_photo_path_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    });
+  Future<void> _pickPhoto(ImageSource src) async {
+    final picked = await _picker.pickImage(source: src, maxWidth: 1600);
+    if (picked != null) setState(() => _image = picked);
+  }
+
+  Future<String?> _uploadPhoto(String workerId) async {
+    final file = _image;
+    if (file == null) return null;
+    final shortName = file.path.split(Platform.pathSeparator).last;
+    final name =
+        '${DateTime.now().millisecondsSinceEpoch}_$shortName'.replaceAll(' ', '');
+    final path = 'workers/$workerId/$name';
+    await Supabase.instance.client.storage
+        .from('violations')
+        .upload(path, File(file.path), fileOptions: const FileOptions(upsert: true));
+    return path;
   }
 
   Future<void> _submitViolation() async {
-    if (_unitController.text.trim().isEmpty) {
+    final unitNumber = _unitController.text.trim();
+    if (unitNumber.isEmpty) {
       _showMessage('Please enter a unit number');
       return;
     }
@@ -61,40 +77,95 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
     try {
       final supabase = Supabase.instance.client;
       final currentUser = supabase.auth.currentUser;
+      if (currentUser == null) {
+        _showMessage('Sign in required');
+        return;
+      }
 
-      if (currentUser != null) {
-        final violationData = {
-          'unit_number': _unitController.text.trim(),
-          'violation_type': _selectedViolationType,
-          'description': _descriptionController.text.trim(),
-          'photo_path': _photoPath,
-          'reported_by': currentUser.id,
-          'property_id': 'mock_property_id', // Would come from worker assignment
-          'status': 'pending',
-          'created_at': DateTime.now().toIso8601String(),
-        };
+      final assigns = await supabase
+          .from('worker_assignments')
+          .select('property_id')
+          .eq('user_id', currentUser.id)
+          .eq('is_active', true);
+      final plist =
+          List<Map<String, dynamic>>.from(assigns as List).map((e) {
+        return e['property_id']?.toString();
+      }).whereType<String>().toSet();
+      if (plist.isEmpty) {
+        _showMessage('No property assignment — contact dispatch.');
+        return;
+      }
 
-        // Mock submission - in real app would save to Supabase
-        await Future.delayed(const Duration(seconds: 1)); // Simulate network call
-        
-        _showMessage('Violation reported successfully!');
-        
-        // Clear form
-        _unitController.clear();
-        _descriptionController.clear();
-        setState(() {
-          _photoPath = null;
-        });
-
-        // Navigate back to worker dashboard
-        if (mounted) {
-          Navigator.of(context).pop();
+      final unitsResp = await supabase
+          .from('units')
+          .select('id, floors!inner(buildings!inner(property_id))')
+          .eq('unit_number', unitNumber);
+      final rows = List<Map<String, dynamic>>.from(unitsResp as List);
+      String? unitId;
+      for (final r in rows) {
+        final nested = r['floors'];
+        if (nested is! Map) continue;
+        final b = nested['buildings'];
+        if (b is! Map) continue;
+        final pid = b['property_id']?.toString();
+        if (pid != null && plist.contains(pid)) {
+          unitId = r['id']?.toString();
+          break;
         }
       }
+      if (unitId == null) {
+        _showMessage(
+            'Unit not found or not on your assigned properties.');
+        return;
+      }
+
+      final ru = await supabase
+          .from('resident_units')
+          .select('user_id')
+          .eq('unit_id', unitId)
+          .eq('is_active', true)
+          .maybeSingle();
+      if (ru == null || ru['user_id'] == null) {
+        _showMessage('No active resident mapped to this unit.');
+        return;
+      }
+      final residentId = ru['user_id'].toString();
+
+      final pickupResp = await supabase
+          .from('pickups')
+          .select('id')
+          .eq('unit_id', unitId)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      final pickupId =
+          pickupResp == null ? null : pickupResp['id']?.toString();
+
+      String? photoPath;
+      if (_image != null) {
+        photoPath = await _uploadPhoto(currentUser.id);
+      }
+
+      await supabase.from('violations').insert({
+        if (pickupId != null) 'pickup_id': pickupId,
+        'unit_id': unitId,
+        'resident_user_id': residentId,
+        'worker_user_id': currentUser.id,
+        'violation_type': _selectedViolationType,
+        'description': _descriptionController.text.trim(),
+        if (photoPath != null) 'photo_url': photoPath,
+        'status': 'pending',
+      });
+
+      _showMessage('Violation reported successfully!');
+      _unitController.clear();
+      _descriptionController.clear();
+      setState(() => _image = null);
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       _showMessage('Failed to report violation: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -104,7 +175,7 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         title: const Text(
-          'Report Violation',
+          'Report violation',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.red.shade700,
@@ -117,228 +188,106 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Instructions Card
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
+            Card(
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.warning,
-                            color: Colors.red.shade700,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        const Expanded(
-                          child: Text(
-                            'Report Violation',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                      ],
+                    const Text(
+                      'Document the condition at the door per property rules.',
+                      style: TextStyle(fontSize: 15),
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      'Document and report violations for proper follow-up and resident communication.',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade700,
-                        height: 1.4,
+                    DropdownButtonFormField<String>(
+                      value: _selectedViolationType,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Violation type',
+                      ),
+                      items: kViolationDbTypes
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e['value'],
+                              child: Text(e['label']!),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _selectedViolationType = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _unitController,
+                      decoration: const InputDecoration(
+                        labelText: 'Unit number',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.text,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _descriptionController,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-
-            const SizedBox(height: 24),
-
-            // Violation Form Card
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Unit Number
-                    TextFormField(
-                      controller: _unitController,
-                      decoration: const InputDecoration(
-                        labelText: 'Unit Number',
-                        border: OutlineInputBorder(),
-                        hintText: 'Enter unit number...',
-                        prefixIcon: Icon(Icons.home),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Violation Type
-                    DropdownButtonFormField<String>(
-                      value: _selectedViolationType,
-                      decoration: const InputDecoration(
-                        labelText: 'Violation Type',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.category),
-                      ),
-                      items: _violationTypes.map((type) {
-                        return DropdownMenuItem(
-                          value: type['value'],
-                          child: Text(type['label']!),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() => _selectedViolationType = value!);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Description
-                    TextFormField(
-                      controller: _descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Description',
-                        border: OutlineInputBorder(),
-                        hintText: 'Describe the violation in detail...',
-                        prefixIcon: Icon(Icons.description),
-                      ),
-                      maxLines: 4,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Photo Upload
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Photo Evidence',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (_photoPath != null) ...[
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.green.shade200),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.check_circle,
-                                    color: Colors.green.shade600,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Photo captured: ${_photoPath!.split('/').last}',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.green.shade800,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ] else ...[
-                            ElevatedButton.icon(
-                              onPressed: _capturePhoto,
-                              icon: const Icon(Icons.camera_alt),
-                              label: const Text('Capture Photo'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue.shade600,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Submit Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _submitViolation,
-                        icon: _isLoading 
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : const Icon(Icons.send),
-                        label: Text(_isLoading ? 'Submitting...' : 'Submit Violation'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade600,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _isLoading
+                      ? null
+                      : () => _pickPhoto(ImageSource.camera),
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: const Text('Photo (camera)'),
                 ),
+                OutlinedButton.icon(
+                  onPressed: _isLoading
+                      ? null
+                      : () => _pickPhoto(ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Photo (gallery)'),
+                ),
+              ],
+            ),
+            if (_image != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  _image!.path.split('/').last,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _submitViolation,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade700,
+                  foregroundColor: Colors.white,
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child:
+                            CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Submit report'),
               ),
             ),
           ],

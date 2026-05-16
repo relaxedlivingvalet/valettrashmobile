@@ -1,7 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../resident/screens/resident_dashboard_screen.dart';
+
 import '../../worker/screens/worker_dashboard_screen.dart';
 import '../../manager/screens/manager_dashboard_screen.dart';
 import '../../manager/screens/property_manager_dashboard_new.dart';
@@ -95,14 +96,6 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
           setState(() {
             _success = 'Signed in successfully!';
           });
-
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const ResidentDashboardScreen(),
-            ),
-          );
         } else {
           setState(() {
             _error = 'Sign in completed but no session created';
@@ -123,24 +116,13 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
           await _ensureUserProfileExists();
 
           setState(() {
-            _success = 'Account created successfully!';
-          });
-
-          if (response.user?.emailConfirmedAt != null) {
-            if (!mounted) return;
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ResidentDashboardScreen(),
-              ),
-            );
-          } else {
-            setState(() {
-              _success =
-                  'Account created! Please check your email for confirmation.';
+            _success = response.user?.emailConfirmedAt != null
+                ? 'Account created successfully!'
+                : 'Account created! Please check your email for confirmation.';
+            if (response.user?.emailConfirmedAt == null) {
               _isLogin = true;
-            });
-          }
+            }
+          });
         } else {
           setState(() {
             _error = 'Account creation failed. Please try again.';
@@ -392,78 +374,80 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              const Divider(),
-              const SizedBox(height: 16),
-              Text(
-                'Test Navigation',
-                style: Theme.of(context).textTheme.titleSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              _buildNavButton(
-                label: 'Property Manager Dashboard',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const PropertyManagerDashboardNewScreen(),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-              _buildNavButton(
-                label: 'Worker Dashboard',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const WorkerDashboardScreen(),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-              _buildNavButton(
-                label: 'Operations Manager Dashboard',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const ManagerDashboardScreen(),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-              _buildNavButton(
-                label: 'Owner Dashboard',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const OwnerDashboardScreen(),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-              _buildNavButton(
-                label: 'Test Connection',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const TestConnectionScreen(),
-                    ),
-                  );
-                },
-              ),
+              if (kDebugMode) ...[
+                const Divider(),
+                const SizedBox(height: 16),
+                Text(
+                  'Test Navigation (debug only)',
+                  style: Theme.of(context).textTheme.titleSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                _buildNavButton(
+                  label: 'Property Manager Dashboard',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const PropertyManagerDashboardNewScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildNavButton(
+                  label: 'Worker Dashboard',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const WorkerDashboardScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildNavButton(
+                  label: 'Operations Manager Dashboard',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const ManagerDashboardScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildNavButton(
+                  label: 'Owner Dashboard',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const OwnerDashboardScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                _buildNavButton(
+                  label: 'Test Connection',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const TestConnectionScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ],
           ),
         ),

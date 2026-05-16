@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../resident/screens/resident_dashboard_screen.dart';
-
 class ResidentSignupScreen extends StatefulWidget {
   const ResidentSignupScreen({super.key});
 
@@ -13,6 +11,8 @@ class ResidentSignupScreen extends StatefulWidget {
 class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _unitController = TextEditingController();
   final _inviteCodeController = TextEditingController();
   String? _selectedPropertyId;
@@ -29,6 +29,8 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _unitController.dispose();
     _inviteCodeController.dispose();
     super.dispose();
@@ -40,12 +42,14 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
       final properties = await supabase
           .from('properties')
           .select('id, name')
+          .eq('is_active', true)
           .order('name');
-      
+
       setState(() {
         _properties = List<Map<String, dynamic>>.from(properties);
       });
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load properties: $e')),
       );
@@ -53,22 +57,33 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
   }
 
   Future<Map<String, dynamic>?> _verifyInviteCode() async {
-    if (_selectedPropertyId == null || 
-        _unitController.text.trim().isEmpty || 
+    if (_selectedPropertyId == null ||
+        _unitController.text.trim().isEmpty ||
         _inviteCodeController.text.trim().isEmpty) {
       return null;
     }
 
     try {
       final supabase = Supabase.instance.client;
-      final result = await supabase.rpc('verify_invite_code', params: {
-        'p_invite_code': _inviteCodeController.text.trim(),
-        'p_property_id': _selectedPropertyId,
-        'p_unit_number': _unitController.text.trim(),
-      });
-      
-      return result.isNotEmpty ? result.first : null;
+      final result = await supabase.rpc(
+        'verify_invite_code',
+        params: {
+          'p_invite_code': _inviteCodeController.text.trim(),
+          'p_property_id': _selectedPropertyId,
+          'p_unit_number': _unitController.text.trim(),
+        },
+      );
+
+      if (result is! List || result.isEmpty) {
+        return null;
+      }
+      final row = result.first;
+      if (row is! Map<String, dynamic>) {
+        return Map<String, dynamic>.from(row as Map);
+      }
+      return row;
     } catch (e) {
+      if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error verifying invite code: $e')),
       );
@@ -77,9 +92,10 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
   }
 
   Future<void> _signUp() async {
-    // Validate inputs
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.trim().isEmpty ||
+        _firstNameController.text.trim().isEmpty ||
+        _lastNameController.text.trim().isEmpty ||
         _selectedPropertyId == null ||
         _unitController.text.trim().isEmpty ||
         _inviteCodeController.text.trim().isEmpty) {
@@ -92,19 +108,22 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Step 1: Verify invite code
       final verification = await _verifyInviteCode();
-      if (verification == null || !verification['is_valid']) {
+      if (verification == null || verification['is_valid'] != true) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid invite code for this property and unit'),
+          SnackBar(
+            content: Text(
+              verification == null
+                  ? 'Unable to validate invite.'
+                  : (verification['message']?.toString() ?? 'Invalid invite'),
+            ),
             backgroundColor: Colors.red,
           ),
         );
         return;
       }
 
-      // Step 2: Create auth user
       final supabase = Supabase.instance.client;
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
@@ -112,6 +131,7 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
       );
 
       if (authResponse.user == null) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to create account'),
@@ -121,22 +141,33 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
         return;
       }
 
-      // Step 3: Insert user profile into public.users
+      final userId = authResponse.user!.id;
+
       await supabase.from('users').insert({
-        'id': authResponse.user!.id,
+        'id': userId,
         'email': _emailController.text.trim(),
-        'property_id': _selectedPropertyId,
-        'unit_number': _unitController.text.trim(),
+        'first_name': _firstNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
         'role': 'resident',
       });
 
-      // Step 4: Update invite code as assigned
-      await supabase.from('invite_codes').update({
-        'assigned_user_id': authResponse.user!.id,
-        'assigned_at': DateTime.now().toIso8601String(),
-      }).eq('id', verification['invite_id']);
+      await supabase.rpc(
+        'claim_invite_code',
+        params: {
+          'p_invite_id': verification['invite_id'],
+          'p_user_id': userId,
+        },
+      );
 
-      // Step 5: Show success message and navigate
+      await supabase.from('resident_units').insert({
+        'user_id': userId,
+        'unit_id': verification['unit_id'],
+        'property_id': verification['property_id'],
+        'move_in_date': DateTime.now().toIso8601String().split('T').first,
+        'is_active': true,
+      });
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Account created successfully!'),
@@ -144,16 +175,13 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
         ),
       );
 
-      // Navigate to resident dashboard
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const ResidentDashboardScreen(),
-          ),
-        );
+      if (Supabase.instance.client.auth.currentSession != null) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else {
+        Navigator.of(context).pop();
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Signup failed: $e'),
@@ -161,7 +189,7 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
         ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -187,7 +215,6 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Instructions Card
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -234,7 +261,7 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                         ),
                         const SizedBox(height: 16),
                         const Text(
-                          'Enter your details and invite code to create your resident account.',
+                          'Use the invite code from your property manager for your unit.',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey,
@@ -245,10 +272,7 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 24),
-
-                // Sign Up Form Card
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -275,9 +299,25 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-
-                        // Email
-                        TextFormField(
+                        TextField(
+                          controller: _firstNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'First name',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.badge_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _lastNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Last name',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.badge_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
                           controller: _emailController,
                           decoration: const InputDecoration(
                             labelText: 'Email',
@@ -288,9 +328,7 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                           keyboardType: TextInputType.emailAddress,
                         ),
                         const SizedBox(height: 16),
-
-                        // Password
-                        TextFormField(
+                        TextField(
                           controller: _passwordController,
                           decoration: const InputDecoration(
                             labelText: 'Password',
@@ -301,8 +339,6 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                           obscureText: true,
                         ),
                         const SizedBox(height: 16),
-
-                        // Property Dropdown
                         DropdownButtonFormField<String>(
                           value: _selectedPropertyId,
                           decoration: const InputDecoration(
@@ -313,7 +349,7 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                           items: _properties.map((property) {
                             return DropdownMenuItem(
                               value: property['id'].toString(),
-                              child: Text(property['name']),
+                              child: Text('${property['name']}'),
                             );
                           }).toList(),
                           onChanged: (value) {
@@ -321,21 +357,17 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                           },
                         ),
                         const SizedBox(height: 16),
-
-                        // Unit Number
-                        TextFormField(
+                        TextField(
                           controller: _unitController,
                           decoration: const InputDecoration(
                             labelText: 'Unit Number',
                             border: OutlineInputBorder(),
-                            hintText: 'Enter your unit number...',
+                            hintText: 'e.g. 104',
                             prefixIcon: Icon(Icons.home),
                           ),
                         ),
                         const SizedBox(height: 16),
-
-                        // Invite Code
-                        TextFormField(
+                        TextField(
                           controller: _inviteCodeController,
                           decoration: const InputDecoration(
                             labelText: 'Invite Code',
@@ -345,8 +377,6 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                           ),
                         ),
                         const SizedBox(height: 24),
-
-                        // Sign Up Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
@@ -361,7 +391,8 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                                     ),
                                   )
                                 : const Icon(Icons.person_add),
-                            label: Text(_isLoading ? 'Creating Account...' : 'Sign Up'),
+                            label: Text(
+                                _isLoading ? 'Creating Account...' : 'Sign Up'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue.shade600,
                               foregroundColor: Colors.white,
@@ -373,8 +404,6 @@ class _ResidentSignupScreenState extends State<ResidentSignupScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-
-                        // Sign In Link
                         Center(
                           child: TextButton(
                             onPressed: () => Navigator.pop(context),

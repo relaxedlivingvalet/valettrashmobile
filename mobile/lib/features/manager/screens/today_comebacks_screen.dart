@@ -9,138 +9,114 @@ class TodayComebacksScreen extends StatefulWidget {
 }
 
 class _TodayComebacksScreenState extends State<TodayComebacksScreen> {
-  String _email = 'No user signed in';
-
-  // Mock comeback data
-  final List<Map<String, dynamic>> _comebacks = const [
-    {
-      'id': '1',
-      'property': 'Sunset Apartments',
-      'unit': '101',
-      'serviceType': 'Trash Removal',
-      'status': 'In Queue',
-      'assignedWorker': 'John Smith',
-      'requestTime': '2:30 PM',
-      'completionTime': '',
-    },
-    {
-      'id': '2',
-      'property': 'Sunset Apartments',
-      'unit': '205',
-      'serviceType': 'Package Delivery',
-      'status': 'In Progress',
-      'assignedWorker': 'Mike Johnson',
-      'requestTime': '3:15 PM',
-      'completionTime': '',
-    },
-    {
-      'id': '3',
-      'property': 'Ocean View Condos',
-      'unit': '312',
-      'serviceType': 'Trash Removal',
-      'status': 'Completed',
-      'assignedWorker': 'Sarah Wilson',
-      'requestTime': '1:45 PM',
-      'completionTime': '2:20 PM',
-    },
-    {
-      'id': '4',
-      'property': 'Riverside Complex',
-      'unit': '108',
-      'serviceType': 'Maintenance',
-      'status': 'In Queue',
-      'assignedWorker': '',
-      'requestTime': '4:00 PM',
-      'completionTime': '',
-    },
-    {
-      'id': '5',
-      'property': 'Sunset Apartments',
-      'unit': '415',
-      'serviceType': 'Trash Removal',
-      'status': 'In Progress',
-      'assignedWorker': 'Tom Davis',
-      'requestTime': '3:30 PM',
-      'completionTime': '',
-    },
-    {
-      'id': '6',
-      'property': 'Ocean View Condos',
-      'unit': '220',
-      'serviceType': 'Package Delivery',
-      'status': 'Completed',
-      'assignedWorker': 'Lisa Chen',
-      'requestTime': '11:30 AM',
-      'completionTime': '12:15 PM',
-    },
-    {
-      'id': '7',
-      'property': 'Riverside Complex',
-      'unit': '305',
-      'serviceType': 'Trash Removal',
-      'status': 'In Queue',
-      'assignedWorker': '',
-      'requestTime': '4:15 PM',
-      'completionTime': '',
-    },
-    {
-      'id': '8',
-      'property': 'Sunset Apartments',
-      'unit': '318',
-      'serviceType': 'Maintenance',
-      'status': 'In Progress',
-      'assignedWorker': 'Alex Turner',
-      'requestTime': '2:00 PM',
-      'completionTime': '',
-    },
-  ];
+  List<Map<String, dynamic>> _comebacks = [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      _email = user.email ?? user.id;
-    }
+    _loadData();
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final supabase = Supabase.instance.client;
+      final now = DateTime.now();
+      final todayStart =
+          DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+
+      final rows = await supabase
+          .from('missed_pickup_requests')
+          .select(
+              'id, status, requested_at, completed_at, is_free, fee_amount, resident_user_id, pickup_id, pickups(unit_id, units(unit_number), nightly_run_id, nightly_runs(properties(name)))')
+          .gte('created_at', todayStart)
+          .order('created_at', ascending: false);
+
+      if (mounted) {
+        setState(() {
+          _comebacks = List<Map<String, dynamic>>.from(rows as List);
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
+    }
   }
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Completed':
-        return Colors.green;
-      case 'In Progress':
+      case 'accepted':
         return Colors.blue;
-      case 'In Queue':
-        return Colors.orange;
+      case 'completed':
+        return Colors.green;
+      case 'expired':
+        return Colors.red;
       default:
-        return Colors.grey;
+        return Colors.orange;
     }
   }
 
-  IconData _getStatusIcon(String status) {
+  String _getStatusLabel(String status) {
     switch (status) {
-      case 'Completed':
-        return Icons.check_circle;
-      case 'In Progress':
-        return Icons.hourglass_bottom;
-      case 'In Queue':
-        return Icons.pending;
+      case 'accepted':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'expired':
+        return 'Expired';
       default:
-        return Icons.help;
+        return 'Pending';
+    }
+  }
+
+  String? _unitNumber(Map<String, dynamic> row) {
+    final pickup = row['pickups'];
+    if (pickup is! Map) return null;
+    final units = pickup['units'];
+    if (units is! Map) return null;
+    return units['unit_number']?.toString();
+  }
+
+  String? _propertyName(Map<String, dynamic> row) {
+    final pickup = row['pickups'];
+    if (pickup is! Map) return null;
+    final run = pickup['nightly_runs'];
+    if (run is! Map) return null;
+    final prop = run['properties'];
+    if (prop is! Map) return null;
+    return prop['name']?.toString();
+  }
+
+  String _formatTime(String isoStr) {
+    try {
+      final dt = DateTime.parse(isoStr).toLocal();
+      final h12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final min = dt.minute.toString().padLeft(2, '0');
+      final ap = dt.hour >= 12 ? 'PM' : 'AM';
+      return '$h12:$min $ap';
+    } catch (_) {
+      return isoStr;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final inQueueCount = _comebacks.where((c) => c['status'] == 'In Queue').length;
-    final inProgressCount = _comebacks.where((c) => c['status'] == 'In Progress').length;
-    final completedCount = _comebacks.where((c) => c['status'] == 'Completed').length;
+    final pending =
+        _comebacks.where((c) => c['status'] == 'pending').length;
+    final inProgress =
+        _comebacks.where((c) => c['status'] == 'accepted').length;
+    final completed =
+        _comebacks.where((c) => c['status'] == 'completed').length;
 
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
@@ -148,206 +124,140 @@ class _TodayComebacksScreenState extends State<TodayComebacksScreen> {
         title: const Text("Today's Comebacks"),
         backgroundColor: Colors.blue.shade700,
         foregroundColor: Colors.white,
-      ),
-      body: Column(
-        children: [
-          // Summary Card
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.refresh, color: Colors.orange, size: 24),
-                    ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Text(
-                        "Today's Comebacks Summary",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildSummaryCard('In Queue', inQueueCount.toString(), Colors.orange),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildSummaryCard('In Progress', inProgressCount.toString(), Colors.blue),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildSummaryCard('Completed', completedCount.toString(), Colors.green),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // Comeback List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _comebacks.length,
-              itemBuilder: (context, index) {
-                final comeback = _comebacks[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${comeback['property']} - Unit ${comeback['unit']}',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(comeback['status']).withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: _getStatusColor(comeback['status']).withOpacity(0.3),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _getStatusIcon(comeback['status']),
-                                    size: 14,
-                                    color: _getStatusColor(comeback['status']),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    comeback['status'],
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: _getStatusColor(comeback['status']),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Icon(Icons.work_outline, size: 16, color: Colors.grey.shade600),
-                            const SizedBox(width: 6),
-                            Text(
-                              comeback['serviceType'],
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Requested: ${comeback['requestTime']}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (comeback['assignedWorker'].isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.person_outline, size: 16, color: Colors.grey.shade600),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Assigned: ${comeback['assignedWorker']}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (comeback['completionTime'].isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.check_circle_outline, size: 16, color: Colors.green.shade600),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Completed: ${comeback['completionTime']}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.green.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+        actions: [
+          IconButton(
+            onPressed: _loadData,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
           ),
         ],
       ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.error_outline,
+                            color: Colors.red.shade400, size: 48),
+                        const SizedBox(height: 16),
+                        Text(_error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.red)),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _loadData,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.refresh,
+                                    color: Colors.orange, size: 24),
+                              ),
+                              const SizedBox(width: 16),
+                              const Expanded(
+                                child: Text(
+                                  "Today's Comebacks",
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${_comebacks.length} total',
+                                style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 14),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                  child: _summaryCard(
+                                      'Pending', pending, Colors.orange)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                  child: _summaryCard(
+                                      'In Progress', inProgress, Colors.blue)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                  child: _summaryCard(
+                                      'Completed', completed, Colors.green)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: _comebacks.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle_outline,
+                                      color: Colors.green.shade400, size: 64),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'No comeback requests today',
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _loadData,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16),
+                                itemCount: _comebacks.length,
+                                itemBuilder: (context, index) =>
+                                    _comebackCard(_comebacks[index]),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, Color color) {
+  Widget _summaryCard(String title, int count, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -358,23 +268,136 @@ class _TodayComebacksScreenState extends State<TodayComebacksScreen> {
       child: Column(
         children: [
           Text(
-            value,
+            '$count',
             style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+                fontSize: 20, fontWeight: FontWeight.bold, color: color),
           ),
           const SizedBox(height: 4),
           Text(
             title,
             style: TextStyle(
-              fontSize: 12,
-              color: color.withOpacity(0.8),
-              fontWeight: FontWeight.w600,
-            ),
+                fontSize: 12,
+                color: color.withOpacity(0.8),
+                fontWeight: FontWeight.w600),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _comebackCard(Map<String, dynamic> row) {
+    final status = row['status'] as String? ?? 'pending';
+    final statusColor = _getStatusColor(status);
+    final statusLabel = _getStatusLabel(status);
+    final unit = _unitNumber(row);
+    final property = _propertyName(row);
+    final isFree = row['is_free'] as bool? ?? true;
+    final requestedAt = row['requested_at'] as String?;
+    final completedAt = row['completed_at'] as String?;
+    final id = row['id'] as String? ?? '';
+
+    final locationLabel = property != null && unit != null
+        ? '$property – Unit $unit'
+        : unit != null
+            ? 'Unit $unit'
+            : 'Request ${id.length > 8 ? id.substring(0, 8) : id}…';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    locationLabel,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border:
+                        Border.all(color: statusColor.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  isFree ? Icons.check_circle_outline : Icons.payment,
+                  size: 16,
+                  color: isFree
+                      ? Colors.green.shade600
+                      : Colors.orange.shade600,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isFree ? 'Free pickup' : 'Paid pickup',
+                  style:
+                      TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                ),
+                if (requestedAt != null) ...[
+                  const SizedBox(width: 20),
+                  Icon(Icons.access_time,
+                      size: 16, color: Colors.grey.shade500),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatTime(requestedAt),
+                    style:
+                        TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
+              ],
+            ),
+            if (completedAt != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.check_circle,
+                      size: 16, color: Colors.green.shade600),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Completed at ${_formatTime(completedAt)}',
+                    style: TextStyle(
+                        fontSize: 13, color: Colors.green.shade700),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -12,10 +12,11 @@ class WorkerDashboardScreen extends StatefulWidget {
 }
 
 class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
+  bool _loading = true;
   String _email = 'No user signed in';
   bool _isOnDuty = false;
-  String _assignedProperty = 'Sunset Apartments - Building A';
-  String _assignedRoute = 'Units 101-120, 201-220';
+  String _assignedProperty = 'No property assignment';
+  String _assignedRoute = 'No active route';
   List<Map<String, dynamic>> _comebackRequests = [];
   List<Map<String, dynamic>> _assignedIssues = [];
 
@@ -26,37 +27,102 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     if (user != null) {
       _email = user.email ?? user.id;
     }
-    _loadMockData();
+    _loadRouteData();
   }
 
-  void _loadMockData() {
-    // Mock comeback requests
-    _comebackRequests = [
-      {
-        'unit': '105',
-        'type': 'Comeback Service',
-        'time': '2:30 PM',
-        'status': 'pending',
-      },
-      {
-        'unit': '112',
-        'type': 'Comeback Service',
-        'time': '3:15 PM',
-        'status': 'pending',
-      },
-    ];
+  Future<void> _loadRouteData() async {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    setState(() => _loading = true);
+    if (user == null) {
+      setState(() => _loading = false);
+      return;
+    }
+    try {
+      final assigns = await client
+          .from('worker_assignments')
+          .select('property_id, properties(name)')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+      final assignList =
+          List<Map<String, dynamic>>.from(assigns as List);
+      final names = <String>[];
+      final propertyIds = <String>{};
+      for (final row in assignList) {
+        final p = row['properties'];
+        if (p is Map && p['name'] != null) {
+          names.add('${p['name']}');
+        }
+        final pid = row['property_id']?.toString();
+        if (pid != null) propertyIds.add(pid);
+      }
+      if (names.isNotEmpty) {
+        _assignedProperty = names.join(', ');
+      }
 
-    // Mock assigned issues (only items assigned by admin)
-    _assignedIssues = [
-      {
-        'unit': '108',
-        'type': 'Issue',
-        'description': 'Heavy furniture blocking service area',
-        'time': '1:45 PM',
-        'priority': 'high',
-        'assigned_by': 'Admin',
-      },
-    ];
+      final routes = await client
+          .from('routes')
+          .select('id, name')
+          .eq('worker_id', user.id)
+          .eq('is_active', true);
+      final routeList = List<Map<String, dynamic>>.from(routes as List);
+      if (routeList.isNotEmpty) {
+        final routeId = routeList.first['id'];
+        final stops = await client
+            .from('route_stops')
+            .select('stop_order, units(unit_number)')
+            .eq('route_id', routeId)
+            .order('stop_order', ascending: true);
+        final stopList = List<Map<String, dynamic>>.from(stops as List);
+        final nums = stopList
+            .map((s) {
+              final u = s['units'];
+              if (u is Map) return u['unit_number']?.toString();
+              return null;
+            })
+            .whereType<String>()
+            .toList();
+        _assignedRoute =
+            '${routeList.first['name']}: ${nums.take(20).join(', ')}${nums.length > 20 ? '…' : ''}';
+      }
+
+      final rawComebacks = await client
+          .from('missed_pickup_requests')
+          .select(
+            'id, status, requested_at, pickups(units(unit_number), nightly_runs(property_id))',
+          )
+          .limit(80);
+      final cbList = List<Map<String, dynamic>>.from(rawComebacks as List);
+      _comebackRequests = [];
+      for (final row in cbList) {
+        final p = row['pickups'];
+        if (p is! Map) continue;
+        final nr = p['nightly_runs'];
+        final propId =
+            nr is Map ? nr['property_id']?.toString() : null;
+        if (propId != null && !propertyIds.contains(propId)) continue;
+        final u = p['units'];
+        final unit = u is Map ? u['unit_number']?.toString() ?? '?' : '?';
+        _comebackRequests.add({
+          'id': row['id']?.toString(),
+          'unit': unit,
+          'type': 'Comeback',
+          'time': row['requested_at']?.toString() ?? '',
+          'status': row['status']?.toString() ?? 'pending',
+        });
+      }
+
+      _assignedIssues = [];
+    } catch (_) {
+      _comebackRequests = [];
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+
+  Future<void> _refresh() async {
+    await _loadRouteData();
   }
 
   void _showMessage(String message) {
@@ -103,11 +169,24 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     );
   }
 
-  void _completeComebackRequest(int index) {
-    setState(() {
-      _comebackRequests.removeAt(index);
-    });
-    _showMessage('Comeback request completed successfully!');
+  Future<void> _completeComebackRequest(int index) async {
+    final item = _comebackRequests[index];
+    final id = item['id']?.toString();
+    if (id != null) {
+      try {
+        await Supabase.instance.client
+            .from('missed_pickup_requests')
+            .update({
+              'status': 'completed',
+              'completed_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', id);
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() => _comebackRequests.removeAt(index));
+      _showMessage('Comeback request completed successfully!');
+    }
   }
 
   @override
@@ -120,13 +199,22 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            onPressed: _loading ? null : _refresh,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh routes',
+          ),
+          IconButton(
             onPressed: _signOut,
             icon: const Icon(Icons.logout),
             tooltip: 'Sign Out',
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _refresh,
+              child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
@@ -610,6 +698,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
           ],
         ),
       ),
+            ),
     );
   }
 }

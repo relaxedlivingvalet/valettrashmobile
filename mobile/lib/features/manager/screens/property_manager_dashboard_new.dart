@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'simple_notification_sender_screen.dart';
 
 class PropertyManagerDashboardNewScreen extends StatefulWidget {
   const PropertyManagerDashboardNewScreen({super.key});
@@ -11,40 +12,201 @@ class PropertyManagerDashboardNewScreen extends StatefulWidget {
 
 class _PropertyManagerDashboardNewScreenState
     extends State<PropertyManagerDashboardNewScreen> {
-  String _email = 'No user signed in';
+  bool _loading = true;
+  String? _error;
+  String _email = '';
 
-  final String _propertyName = 'Sunset Gardens';
-  final String _serviceWindow = '6:00 PM - 10:00 PM';
-  final bool _serviceActive = true;
-  final bool _serviceCompleted = false;
-  final bool _workerOnDuty = true;
+  List<Map<String, dynamic>> _properties = [];
+  List<Map<String, dynamic>> _inviteCodes = [];
 
-  final int _verifiedResidents = 42;
-  final int _totalUnits = 80;
-  final int _claimedUnits = 42;
-  final int _unclaimedUnits = 38;
-  final int _inviteCodesIssued = 80;
-  final int _inviteCodesUsed = 42;
-
-  final int _comebackRequests = 5;
-  final int _residentConcerns = 7;
-  final int _activeViolations = 3;
-  final int _extraServiceRequests = 4;
-
-  final List<Map<String, String>> _inviteCodes = const [
-    {'unit': '101', 'code': 'APT101ABC', 'status': 'Used'},
-    {'unit': '102', 'code': 'APT102XYZ', 'status': 'Active'},
-    {'unit': '103', 'code': 'APT103LMN', 'status': 'Active'},
-    {'unit': '104', 'code': 'APT104QRS', 'status': 'Used'},
-  ];
+  int get _totalUnits =>
+      _properties.fold(0, (s, p) => s + (p['unit_count'] as int? ?? 0));
+  int get _totalResidents =>
+      _properties.fold(0, (s, p) => s + (p['resident_count'] as int? ?? 0));
+  int get _totalViolations =>
+      _properties.fold(0, (s, p) => s + (p['violation_count'] as int? ?? 0));
+  int get _totalComebacks =>
+      _properties.fold(0, (s, p) => s + (p['comeback_count'] as int? ?? 0));
+  int get _claimedCodes =>
+      _inviteCodes.where((c) => c['assigned_user_id'] != null).length;
 
   @override
   void initState() {
     super.initState();
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      _email = user.email ?? user.id;
+    _email =
+        Supabase.instance.client.auth.currentUser?.email ?? '';
+    _loadData();
+  }
+
+  Future<int> _unitCountForProperty(String propertyId) async {
+    final client = Supabase.instance.client;
+    final buildings = await client
+        .from('buildings')
+        .select('id')
+        .eq('property_id', propertyId);
+    final buildingIds = (buildings as List)
+        .map((b) => b['id']?.toString())
+        .whereType<String>()
+        .toList();
+    if (buildingIds.isEmpty) return 0;
+
+    final floors = await client
+        .from('floors')
+        .select('id')
+        .inFilter('building_id', buildingIds);
+    final floorIds = (floors as List)
+        .map((f) => f['id']?.toString())
+        .whereType<String>()
+        .toList();
+    if (floorIds.isEmpty) return 0;
+
+    final units = await client
+        .from('units')
+        .select('id')
+        .inFilter('floor_id', floorIds)
+        .eq('is_active', true);
+    return (units as List).length;
+  }
+
+  Future<List<String>> _unitIdsForProperty(String propertyId) async {
+    final client = Supabase.instance.client;
+    final buildings = await client
+        .from('buildings')
+        .select('id')
+        .eq('property_id', propertyId);
+    final buildingIds = (buildings as List)
+        .map((b) => b['id']?.toString())
+        .whereType<String>()
+        .toList();
+    if (buildingIds.isEmpty) return [];
+
+    final floors = await client
+        .from('floors')
+        .select('id')
+        .inFilter('building_id', buildingIds);
+    final floorIds = (floors as List)
+        .map((f) => f['id']?.toString())
+        .whereType<String>()
+        .toList();
+    if (floorIds.isEmpty) return [];
+
+    final units = await client
+        .from('units')
+        .select('id')
+        .inFilter('floor_id', floorIds)
+        .eq('is_active', true);
+    return (units as List)
+        .map((u) => u['id']?.toString())
+        .whereType<String>()
+        .toList();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final client = Supabase.instance.client;
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) {
+      setState(() => _loading = false);
+      return;
     }
+
+    try {
+      final userPropsRows = await client
+          .from('user_properties')
+          .select(
+            'property_id, properties(id, name, service_window_start, service_window_end, is_active)',
+          )
+          .eq('user_id', uid);
+
+      final rows = List<Map<String, dynamic>>.from(userPropsRows as List);
+      final List<Map<String, dynamic>> properties = [];
+      final List<Map<String, dynamic>> allInviteCodes = [];
+
+      for (final row in rows) {
+        final propData = row['properties'];
+        if (propData is! Map) continue;
+        final propId = propData['id']?.toString() ?? '';
+        final propName = propData['name']?.toString() ?? '';
+
+        final results = await Future.wait([
+          client
+              .from('resident_units')
+              .select('id')
+              .eq('property_id', propId)
+              .eq('is_active', true),
+          client
+              .from('invite_codes')
+              .select('id, code, unit_id, assigned_user_id, use_count, max_uses')
+              .eq('property_id', propId)
+              .order('created_at', ascending: false)
+              .limit(10),
+          _unitCountForProperty(propId),
+          _unitIdsForProperty(propId),
+        ]);
+
+        final residentCount = (results[0] as List).length;
+        final propInvites =
+            List<Map<String, dynamic>>.from(results[1] as List);
+        final unitCount = results[2] as int;
+        final unitIds = results[3] as List<String>;
+
+        int violationCount = 0;
+        int comebackCount = 0;
+        if (unitIds.isNotEmpty) {
+          final violations = await client
+              .from('violations')
+              .select('id')
+              .inFilter('unit_id', unitIds)
+              .eq('status', 'pending');
+          violationCount = (violations as List).length;
+        }
+
+        final sw = propData['service_window_start'] ?? '18:00';
+        final ew = propData['service_window_end'] ?? '22:00';
+
+        properties.add({
+          'id': propId,
+          'name': propName,
+          'service_window': '${_fmtTime(sw)} – ${_fmtTime(ew)}',
+          'unit_count': unitCount,
+          'resident_count': residentCount,
+          'violation_count': violationCount,
+          'comeback_count': comebackCount,
+          'invite_count': propInvites.length,
+          'claimed_count': propInvites
+              .where((c) => c['assigned_user_id'] != null)
+              .length,
+        });
+
+        for (final ic in propInvites.take(6)) {
+          allInviteCodes.add({...ic, 'property_id': propId, 'property_name': propName});
+        }
+      }
+
+      setState(() {
+        _properties = properties;
+        _inviteCodes = allInviteCodes;
+      });
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _fmtTime(dynamic t) {
+    if (t == null) return '--';
+    final parts = t.toString().split(':');
+    if (parts.length < 2) return t.toString();
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    final ap = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12;
+    if (h12 == 0) h12 = 12;
+    return '$h12:${m.toString().padLeft(2, '0')} $ap';
   }
 
   Future<void> _signOut() async {
@@ -53,9 +215,15 @@ class _PropertyManagerDashboardNewScreenState
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+  void _openNotificationSender({String? propertyId, String mode = 'property'}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SimpleNotificationSenderScreen(
+          initialPropertyId: propertyId,
+          initialMode: mode,
+        ),
+      ),
     );
   }
 
@@ -204,14 +372,15 @@ class _PropertyManagerDashboardNewScreenState
                 ],
               ),
             ),
+            Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _inviteCodeRow(Map<String, String> item) {
-    final isUsed = item['status'] == 'Used';
+  Widget _inviteCodeRow(Map<String, dynamic> item) {
+    final isUsed = item['assigned_user_id'] != null;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
@@ -226,12 +395,13 @@ class _PropertyManagerDashboardNewScreenState
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Unit ${item['unit']}  •  ${item['code']}',
+              '${item['property_name'] ?? ''}  •  ${item['code'] ?? ''}',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Container(
@@ -240,22 +410,21 @@ class _PropertyManagerDashboardNewScreenState
               color: isUsed ? Colors.green.shade50 : Colors.orange.shade50,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isUsed ? Colors.green.shade200 : Colors.orange.shade200,
+                color: isUsed
+                    ? Colors.green.shade200
+                    : Colors.orange.shade200,
               ),
             ),
             child: Text(
-              item['status'] ?? '',
+              isUsed ? 'Used' : 'Active',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isUsed ? Colors.green.shade700 : Colors.orange.shade700,
+                color: isUsed
+                    ? Colors.green.shade700
+                    : Colors.orange.shade700,
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: () => _showMessage('Copied ${item['code']}'),
-            child: const Text('Copy'),
           ),
         ],
       ),
@@ -272,319 +441,291 @@ class _PropertyManagerDashboardNewScreenState
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            onPressed: _loading ? null : _loadData,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+          ),
+          IconButton(
             onPressed: _signOut,
             icon: const Icon(Icons.logout),
             tooltip: 'Sign Out',
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            _sectionCard(
-              title: 'Property Overview',
-              icon: Icons.apartment,
-              iconColor: Colors.indigo,
-              child: Column(
-                children: [
-                  _metricCard(
-                    title: 'Property',
-                    value: _propertyName,
-                    icon: Icons.business,
-                    color: Colors.indigo,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline,
+                            color: Colors.red, size: 48),
+                        const SizedBox(height: 16),
+                        Text(_error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.red)),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                            onPressed: _loadData,
+                            child: const Text('Retry')),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Service Window',
-                          value: _serviceWindow,
-                          icon: Icons.access_time,
-                          color: Colors.blue,
+                )
+              : _properties.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.apartment,
+                              size: 64, color: Colors.grey.shade400),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No properties assigned yet.',
+                            style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey.shade600),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'A super admin must assign you to a property.',
+                            style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadData,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            // Portfolio overview
+                            _sectionCard(
+                              title: 'Portfolio Overview',
+                              icon: Icons.apartment,
+                              iconColor: Colors.indigo,
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _metricCard(
+                                          title: 'Properties',
+                                          value: '${_properties.length}',
+                                          icon: Icons.business,
+                                          color: Colors.indigo,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _metricCard(
+                                          title: 'Total Units',
+                                          value: '$_totalUnits',
+                                          icon: Icons.meeting_room,
+                                          color: Colors.blue,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _metricCard(
+                                          title: 'Verified Residents',
+                                          value: '$_totalResidents',
+                                          icon: Icons.people,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _metricCard(
+                                          title: 'Pending Violations',
+                                          value: '$_totalViolations',
+                                          icon: Icons.warning,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _metricCard(
+                                          title: 'Codes Issued',
+                                          value:
+                                              '${_inviteCodes.length}',
+                                          icon: Icons.vpn_key,
+                                          color: Colors.orange,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _metricCard(
+                                          title: 'Codes Used',
+                                          value: '$_claimedCodes',
+                                          icon: Icons.check_circle,
+                                          color: Colors.teal,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // Per-property breakdown
+                            ..._properties.map((p) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 24),
+                                  child: _sectionCard(
+                                    title: p['name'] ?? 'Property',
+                                    icon: Icons.apartment,
+                                    iconColor: Colors.indigo,
+                                    child: Column(
+                                      children: [
+                                        _metricCard(
+                                          title: 'Service Window',
+                                          value:
+                                              p['service_window'] ?? '--',
+                                          icon: Icons.access_time,
+                                          color: Colors.blue,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _metricCard(
+                                                title: 'Units',
+                                                value:
+                                                    '${p['unit_count'] ?? 0}',
+                                                icon: Icons.home,
+                                                color: Colors.blue,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: _metricCard(
+                                                title: 'Residents',
+                                                value:
+                                                    '${p['resident_count'] ?? 0}',
+                                                icon: Icons.people,
+                                                color: Colors.green,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _metricCard(
+                                                title: 'Violations',
+                                                value:
+                                                    '${p['violation_count'] ?? 0}',
+                                                icon: Icons.warning,
+                                                color: Colors.red,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: _metricCard(
+                                                title: 'Codes Used',
+                                                value:
+                                                    '${p['claimed_count'] ?? 0} / ${p['invite_count'] ?? 0}',
+                                                icon: Icons.vpn_key,
+                                                color: Colors.orange,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _actionCard(
+                                                title: 'Alert All Residents',
+                                                subtitle:
+                                                    'Notify entire property',
+                                                icon: Icons.campaign,
+                                                color: Colors.blue,
+                                                onTap: () =>
+                                                    _openNotificationSender(
+                                                  propertyId: p['id']
+                                                      ?.toString(),
+                                                  mode: 'property',
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: _actionCard(
+                                                title: 'Alert Resident',
+                                                subtitle: 'Send to one user',
+                                                icon: Icons.person,
+                                                color: Colors.purple,
+                                                onTap: () =>
+                                                    _openNotificationSender(
+                                                  propertyId: p['id']
+                                                      ?.toString(),
+                                                  mode: 'user',
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )),
+
+                            // Invite codes
+                            if (_inviteCodes.isNotEmpty) ...[
+                              _sectionCard(
+                                title: 'Invite Codes',
+                                icon: Icons.key,
+                                iconColor: Colors.orange,
+                                child: Column(
+                                  children: _inviteCodes
+                                      .map(_inviteCodeRow)
+                                      .toList(),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+
+                            // Footer
+                            Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Text(
+                                  'Signed in as: $_email',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Worker Status',
-                          value: _workerOnDuty ? 'On Duty' : 'Off Duty',
-                          icon: Icons.work,
-                          color: _workerOnDuty ? Colors.green : Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Service Status',
-                          value: _serviceCompleted
-                              ? 'Completed'
-                              : (_serviceActive ? 'Active' : 'Inactive'),
-                          icon: Icons.task_alt,
-                          color: _serviceCompleted
-                              ? Colors.green
-                              : (_serviceActive ? Colors.blue : Colors.grey),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Verified Residents',
-                          value: '$_verifiedResidents',
-                          icon: Icons.people,
-                          color: Colors.purple,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _sectionCard(
-              title: 'Resident Activation',
-              icon: Icons.groups,
-              iconColor: Colors.green,
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Total Units',
-                          value: '$_totalUnits',
-                          icon: Icons.meeting_room,
-                          color: Colors.blue,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Claimed Units',
-                          value: '$_claimedUnits',
-                          icon: Icons.check_circle,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Unclaimed Units',
-                          value: '$_unclaimedUnits',
-                          icon: Icons.radio_button_unchecked,
-                          color: Colors.orange,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Invite Codes Used',
-                          value: '$_inviteCodesUsed / $_inviteCodesIssued',
-                          icon: Icons.vpn_key,
-                          color: Colors.purple,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _sectionCard(
-              title: 'Invite Code Management',
-              icon: Icons.key,
-              iconColor: Colors.orange,
-              child: Column(
-                children: [
-                  ..._inviteCodes.map(_inviteCodeRow),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _actionCard(
-                          title: 'Regenerate Codes',
-                          subtitle: 'Reset unit invite codes',
-                          icon: Icons.refresh,
-                          color: Colors.orange,
-                          onTap: () {
-                            _showMessage('Regenerating invite codes...');
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _actionCard(
-                          title: 'Share Codes',
-                          subtitle: 'Send codes to residents',
-                          icon: Icons.share,
-                          color: Colors.blue,
-                          onTap: () {
-                            _showMessage('Opening code sharing...');
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _sectionCard(
-              title: 'Resident Communication',
-              icon: Icons.notifications,
-              iconColor: Colors.blue,
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _actionCard(
-                          title: 'Alert Entire Property',
-                          subtitle: 'Notify all residents',
-                          icon: Icons.campaign,
-                          color: Colors.blue,
-                          onTap: () {
-                            _showMessage('Opening property-wide alert...');
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _actionCard(
-                          title: 'Alert Specific Unit',
-                          subtitle: 'Send to one unit',
-                          icon: Icons.home,
-                          color: Colors.purple,
-                          onTap: () {
-                            _showMessage('Opening unit alert...');
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _sectionCard(
-              title: 'Open Queues',
-              icon: Icons.list_alt,
-              iconColor: Colors.red,
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Comeback Requests',
-                          value: '$_comebackRequests',
-                          icon: Icons.refresh,
-                          color: Colors.orange,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Resident Concerns',
-                          value: '$_residentConcerns',
-                          icon: Icons.support_agent,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Active Violations',
-                          value: '$_activeViolations',
-                          icon: Icons.warning,
-                          color: Colors.red,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _metricCard(
-                          title: 'Extra Services',
-                          value: '$_extraServiceRequests',
-                          icon: Icons.miscellaneous_services,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _sectionCard(
-              title: 'Property Services',
-              icon: Icons.cleaning_services,
-              iconColor: Colors.teal,
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _actionCard(
-                          title: 'Power Washing / Sanitation',
-                          subtitle: 'Request scheduled service',
-                          icon: Icons.water_drop,
-                          color: Colors.blue,
-                          onTap: () {
-                            _showMessage('Opening sanitation requests...');
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _actionCard(
-                          title: 'Dumpster / Cleanup',
-                          subtitle: 'Request cleanup service',
-                          icon: Icons.delete_outline,
-                          color: Colors.green,
-                          onTap: () {
-                            _showMessage('Opening cleanup requests...');
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  'Signed in as: $_email',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade800,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+                    ),
     );
   }
 }
