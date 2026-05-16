@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../core/app_theme.dart';
-import '../../../core/brand_colors.dart';
+import '../../../core/theme/app_colors.dart';
 import 'violation_report_screen.dart';
 
 class WorkerDashboardScreen extends StatefulWidget {
@@ -312,7 +311,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: BrandColors.primaryBlue,
+                              color: AppColors.info,
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -320,7 +319,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                             'Route',
                             style: TextStyle(
                               fontSize: 12,
-                              color: BrandColors.gray,
+                              color: AppColors.textSecondary,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -330,7 +329,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: BrandColors.primaryBlue,
+                              color: AppColors.info,
                             ),
                           ),
                         ],
@@ -460,7 +459,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: BrandColors.gray,
+                            color: AppColors.textSecondary,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: Colors.grey.shade200),
                           ),
@@ -469,7 +468,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                               Icon(
                                 Icons.home,
                                 size: 16,
-                                color: BrandColors.gray,
+                                color: AppColors.textSecondary,
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -485,7 +484,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                                 request['time'],
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: BrandColors.gray,
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -638,7 +637,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                                   item['time'],
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: BrandColors.gray,
+                                    color: AppColors.textSecondary,
                                   ),
                                 ),
                               ],
@@ -649,7 +648,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                                 item['description'],
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: BrandColors.gray,
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
                             ],

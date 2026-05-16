@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../core/brand_colors.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../manager/screens/simple_notification_sender_screen.dart';
 import '../../manager/screens/manager_dashboard_screen.dart';
 import '../../worker/screens/worker_dashboard_screen.dart';
@@ -52,7 +52,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     final floors = await client
         .from('floors')
         .select('id')
-        .inFilter('building_id', buildingIds);
+        .filter('building_id', 'in', '(${buildingIds.join(',')})');
     final floorIds = (floors as List)
         .map((f) => f['id']?.toString())
         .whereType<String>()
@@ -62,7 +62,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     final units = await client
         .from('units')
         .select('id')
-        .inFilter('floor_id', floorIds)
+        .filter('floor_id', 'in', '(${floorIds.join(',')})')
         .eq('is_active', true);
     return (units as List).length;
   }
@@ -88,7 +88,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         final propId = prop['id']?.toString() ?? '';
         final propName = prop['name']?.toString() ?? '';
 
-        final results = await Future.wait([
+        final results = await Future.wait(<Future<dynamic>>[
           client
               .from('resident_units')
               .select('id')
@@ -396,13 +396,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                     Container(
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: BrandColors.primaryBlue
+                                        color: AppColors.owner
                                             .withOpacity(0.1),
                                         borderRadius:
                                             BorderRadius.circular(12),
                                       ),
                                       child: Icon(Icons.business,
-                                          color: BrandColors.primaryBlue,
+                                          color: AppColors.owner,
                                           size: 24),
                                     ),
                                     const SizedBox(width: 16),
@@ -426,7 +426,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                         'Properties',
                                         '$_totalProperties',
                                         Icons.apartment,
-                                        BrandColors.primaryBlue,
+                                        AppColors.owner,
                                       ),
                                     ),
                                     const SizedBox(width: 12),

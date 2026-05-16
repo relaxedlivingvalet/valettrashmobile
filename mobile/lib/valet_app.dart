@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'features/test/screens/test_connection_screen.dart';
+import 'core/theme/app_theme.dart';
 import 'features/auth/screens/simple_auth_screen.dart';
+import 'features/manager/screens/manager_dashboard_screen.dart';
 import 'features/manager/screens/property_manager_dashboard_new.dart';
 import 'features/owner/screens/owner_dashboard_screen.dart';
 import 'features/resident/screens/resident_dashboard_screen.dart';
+import 'features/test/screens/test_connection_screen.dart';
 import 'features/worker/screens/worker_dashboard_screen.dart';
 
 class ValetApp extends StatelessWidget {
@@ -15,10 +17,7 @@ class ValetApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Relaxed Living Valet',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0FA958)),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.dark,
       home: const AuthGate(),
       routes: {
         '/test': (context) => const TestConnectionScreen(),
@@ -106,6 +105,8 @@ class _RoleHomeState extends State<RoleHome> {
         return const WorkerDashboardScreen();
       case 'property_manager':
         return const PropertyManagerDashboardNewScreen();
+      case 'operations_manager':
+        return const ManagerDashboardScreen();
       case 'super_admin':
         return const OwnerDashboardScreen();
       case 'resident':

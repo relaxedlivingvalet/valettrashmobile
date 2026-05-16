@@ -8,8 +8,7 @@ import '../../manager/screens/manager_dashboard_screen.dart';
 import '../../manager/screens/property_manager_dashboard_new.dart';
 import '../../owner/screens/owner_dashboard_screen.dart';
 import '../../test/screens/test_connection_screen.dart';
-import '../../../core/app_theme.dart';
-import '../../../core/brand_colors.dart';
+
 import 'resident_signup_screen.dart';
 
 class SimpleAuthScreen extends StatefulWidget {
@@ -187,9 +186,9 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          backgroundColor: BrandColors.white,
-          foregroundColor: BrandColors.primaryBlack,
-          side: const BorderSide(color: BrandColors.lightGray),
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF0D0D0D),
+          side: const BorderSide(color: const Color(0xFFE5E7EB)),
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
@@ -207,7 +206,9 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          child: Column(
+          child: Form(
+            key: _formKey,
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 48),
@@ -325,14 +326,18 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _submit,
-                  style: AppTheme.primaryButtonStyle,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
                   child: _isLoading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: BrandColors.white,
+                            color: Colors.white,
                           ),
                         )
                       : Text(
@@ -370,7 +375,11 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
                   icon: const Icon(Icons.vpn_key, size: 18),
                   label:
                       const Text('Resident Sign Up (Invite Code)'),
-                  style: AppTheme.secondaryButtonStyle,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                    side: const BorderSide(color: Colors.blue),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
@@ -450,6 +459,7 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
               ],
             ],
           ),
+        ),
         ),
       ),
     );
