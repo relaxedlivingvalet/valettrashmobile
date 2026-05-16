@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -8,6 +8,7 @@ import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../../core/widgets/stat_tile.dart';
+import 'pm_compliance_report_screen.dart';
 import 'simple_notification_sender_screen.dart';
 
 class PropertyManagerDashboardNewScreen extends StatefulWidget {
@@ -29,6 +30,8 @@ class _PropertyManagerDashboardNewScreenState
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _inviteCodes = [];
 
+  AppColorsScheme _c = AppColorsScheme.dark;
+
   int get _totalUnits =>
       _properties.fold(0, (s, p) => s + (p['unit_count'] as int? ?? 0));
   int get _totalResidents =>
@@ -39,6 +42,12 @@ class _PropertyManagerDashboardNewScreenState
       _properties.fold(0, (s, p) => s + (p['comeback_count'] as int? ?? 0));
   int get _claimedCodes =>
       _inviteCodes.where((c) => c['assigned_user_id'] != null).length;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _c = context.roleColors;
+  }
 
   @override
   void initState() {
@@ -242,7 +251,7 @@ class _PropertyManagerDashboardNewScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: _c.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -299,7 +308,7 @@ class _PropertyManagerDashboardNewScreenState
     if (_loading) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-        children: const [
+        children: [
           SkeletonCard(height: 128),
           SizedBox(height: 12),
           SkeletonCard(height: 60),
@@ -326,20 +335,20 @@ class _PropertyManagerDashboardNewScreenState
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.apartment_outlined, size: 56, color: AppColors.textMuted),
+          children: [
+            Icon(Icons.apartment_outlined, size: 56, color: _c.textMuted),
             SizedBox(height: 16),
             Text(
               'No properties assigned',
               style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary),
+                  color: _c.textPrimary),
             ),
             SizedBox(height: 8),
             Text(
               'A super admin must assign you to a property.',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: _c.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -349,7 +358,7 @@ class _PropertyManagerDashboardNewScreenState
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppColors.manager,
-      backgroundColor: AppColors.surface1,
+      backgroundColor: _c.surface1,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
         children: [
@@ -390,9 +399,9 @@ class _PropertyManagerDashboardNewScreenState
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface1,
+        color: _c.surface1,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: _c.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,18 +414,18 @@ class _PropertyManagerDashboardNewScreenState
                   children: [
                     Text(
                       p['name']?.toString() ?? 'Property',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: _c.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       p['service_window']?.toString() ?? '--',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textSecondary,
+                        color: _c.textSecondary,
                       ),
                     ),
                   ],
@@ -464,7 +473,7 @@ class _PropertyManagerDashboardNewScreenState
                   label: const Text('Alert All'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.manager,
-                    side: const BorderSide(color: AppColors.border),
+                    side: BorderSide(color: _c.border),
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
@@ -481,8 +490,8 @@ class _PropertyManagerDashboardNewScreenState
                   icon: const Icon(Icons.person_outline, size: 16),
                   label: const Text('1 Resident'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textSecondary,
-                    side: const BorderSide(color: AppColors.border),
+                    foregroundColor: _c.textSecondary,
+                    side: BorderSide(color: _c.border),
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
@@ -500,9 +509,9 @@ class _PropertyManagerDashboardNewScreenState
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Column(
         children: [
@@ -516,10 +525,10 @@ class _PropertyManagerDashboardNewScreenState
           ),
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 7,
               fontWeight: FontWeight.w700,
-              color: AppColors.textMuted,
+              color: _c.textMuted,
               letterSpacing: 0.8,
             ),
           ),
@@ -538,13 +547,13 @@ class _PropertyManagerDashboardNewScreenState
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Residents & Codes',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: _c.textPrimary,
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -561,7 +570,7 @@ class _PropertyManagerDashboardNewScreenState
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: const [
+              children: [
                 SkeletonCard(height: 66),
                 SizedBox(height: 10),
                 SkeletonCard(height: 66),
@@ -575,14 +584,14 @@ class _PropertyManagerDashboardNewScreenState
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(Icons.vpn_key_outlined,
-                      size: 48, color: AppColors.textMuted),
+                      size: 48, color: _c.textMuted),
                   SizedBox(height: 12),
                   Text(
                     'No invite codes issued yet',
                     style:
-                        TextStyle(color: AppColors.textMuted, fontSize: 14),
+                        TextStyle(color: _c.textMuted, fontSize: 14),
                   ),
                 ],
               ),
@@ -593,7 +602,7 @@ class _PropertyManagerDashboardNewScreenState
             child: RefreshIndicator(
               onRefresh: _loadData,
               color: AppColors.manager,
-              backgroundColor: AppColors.surface1,
+              backgroundColor: _c.surface1,
               child: ListView.separated(
                 padding:
                     const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -614,9 +623,9 @@ class _PropertyManagerDashboardNewScreenState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface1,
+        color: _c.surface1,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: _c.border),
       ),
       child: Row(
         children: [
@@ -624,7 +633,7 @@ class _PropertyManagerDashboardNewScreenState
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.manager.withOpacity(0.12),
+              color: AppColors.manager.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.vpn_key_outlined,
@@ -637,19 +646,19 @@ class _PropertyManagerDashboardNewScreenState
               children: [
                 Text(
                   item['code']?.toString() ?? '--',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: _c.textPrimary,
                     letterSpacing: 0.5,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   item['property_name']?.toString() ?? '',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.textSecondary,
+                    color: _c.textSecondary,
                   ),
                 ),
               ],
@@ -671,14 +680,14 @@ class _PropertyManagerDashboardNewScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Text(
             'Send Notifications',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+              color: _c.textPrimary,
               letterSpacing: -0.5,
             ),
           ),
@@ -723,8 +732,8 @@ class _PropertyManagerDashboardNewScreenState
                 icon: const Icon(Icons.person_outline, size: 18),
                 label: const Text('Notify Specific Resident'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
-                  side: const BorderSide(color: AppColors.border),
+                  foregroundColor: _c.textSecondary,
+                  side: BorderSide(color: _c.border),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
@@ -744,14 +753,14 @@ class _PropertyManagerDashboardNewScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Text(
             'Settings',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+              color: _c.textPrimary,
               letterSpacing: -0.5,
             ),
           ),
@@ -763,15 +772,15 @@ class _PropertyManagerDashboardNewScreenState
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.surface1,
+                  color: _c.surface1,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: _c.border),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: AppColors.manager.withOpacity(0.15),
+                      backgroundColor: AppColors.manager.withValues(alpha: 0.15),
                       child: Text(
                         initial,
                         style: TextStyle(
@@ -788,18 +797,18 @@ class _PropertyManagerDashboardNewScreenState
                         children: [
                           Text(
                             _email,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
+                              color: _c.textPrimary,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             '${_properties.length} propert${_properties.length == 1 ? 'y' : 'ies'}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textSecondary,
+                              color: _c.textSecondary,
                             ),
                           ),
                         ],
@@ -812,7 +821,45 @@ class _PropertyManagerDashboardNewScreenState
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+              Text('REPORTS',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: _c.textMuted,
+                      letterSpacing: 1.2)),
+              const SizedBox(height: 10),
+              ..._properties.map((p) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      tileColor: _c.surface1,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: _c.border),
+                      ),
+                      leading: const Icon(Icons.bar_chart_outlined,
+                          color: AppColors.manager, size: 22),
+                      title: Text(p['name']?.toString() ?? '',
+                          style: TextStyle(
+                              color: _c.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600)),
+                      subtitle: Text('Service history & SLA',
+                          style: TextStyle(
+                              color: _c.textSecondary, fontSize: 12)),
+                      trailing: Icon(Icons.chevron_right,
+                          color: _c.textMuted, size: 20),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => PmComplianceReportScreen(
+                                    propertyId: p['id']?.toString() ?? '',
+                                    propertyName:
+                                        p['name']?.toString() ?? '',
+                                  ))),
+                    ),
+                  )),
+              const SizedBox(height: 12),
               PrimaryButton(
                 label: 'Sign Out',
                 onPressed: _signOut,
@@ -840,7 +887,7 @@ class _PropertyManagerDashboardNewScreenState
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -856,7 +903,7 @@ class _PropertyManagerDashboardNewScreenState
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.12),
+                    color: iconColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: iconColor, size: 24),
@@ -865,7 +912,7 @@ class _PropertyManagerDashboardNewScreenState
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
@@ -914,7 +961,7 @@ class _PropertyManagerDashboardNewScreenState
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     color: Colors.black87,
                     fontWeight: FontWeight.w600,
@@ -955,7 +1002,7 @@ class _PropertyManagerDashboardNewScreenState
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       color: Colors.black87,
                       fontWeight: FontWeight.w600,
@@ -996,7 +1043,7 @@ class _PropertyManagerDashboardNewScreenState
           Expanded(
             child: Text(
               '${item['property_name'] ?? ''}  •  ${item['code'] ?? ''}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
@@ -1028,304 +1075,6 @@ class _PropertyManagerDashboardNewScreenState
           ),
         ],
       ),
-    );
-  }
-
-  // old build removed — replaced by tabbed version above
-  Widget _buildLegacyDashboard(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      appBar: AppBar(
-        title: const Text('Property Manager Dashboard'),
-        backgroundColor: Colors.indigo.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: _loading ? null : _loadData,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-          ),
-          IconButton(
-            onPressed: _signOut,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign Out',
-          ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.error_outline,
-                            color: Colors.red, size: 48),
-                        const SizedBox(height: 16),
-                        Text(_error!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.red)),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                            onPressed: _loadData,
-                            child: const Text('Retry')),
-                      ],
-                    ),
-                  ),
-                )
-              : _properties.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.apartment,
-                              size: 64, color: Colors.grey.shade400),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No properties assigned yet.',
-                            style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade600),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'A super admin must assign you to a property.',
-                            style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade500),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadData,
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          children: [
-                            // Portfolio overview
-                            _sectionCard(
-                              title: 'Portfolio Overview',
-                              icon: Icons.apartment,
-                              iconColor: Colors.indigo,
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _metricCard(
-                                          title: 'Properties',
-                                          value: '${_properties.length}',
-                                          icon: Icons.business,
-                                          color: Colors.indigo,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: _metricCard(
-                                          title: 'Total Units',
-                                          value: '$_totalUnits',
-                                          icon: Icons.meeting_room,
-                                          color: Colors.blue,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _metricCard(
-                                          title: 'Verified Residents',
-                                          value: '$_totalResidents',
-                                          icon: Icons.people,
-                                          color: Colors.green,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: _metricCard(
-                                          title: 'Pending Violations',
-                                          value: '$_totalViolations',
-                                          icon: Icons.warning,
-                                          color: Colors.red,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _metricCard(
-                                          title: 'Codes Issued',
-                                          value:
-                                              '${_inviteCodes.length}',
-                                          icon: Icons.vpn_key,
-                                          color: Colors.orange,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: _metricCard(
-                                          title: 'Codes Used',
-                                          value: '$_claimedCodes',
-                                          icon: Icons.check_circle,
-                                          color: Colors.teal,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 24),
-
-                            // Per-property breakdown
-                            ..._properties.map((p) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 24),
-                                  child: _sectionCard(
-                                    title: p['name'] ?? 'Property',
-                                    icon: Icons.apartment,
-                                    iconColor: Colors.indigo,
-                                    child: Column(
-                                      children: [
-                                        _metricCard(
-                                          title: 'Service Window',
-                                          value:
-                                              p['service_window'] ?? '--',
-                                          icon: Icons.access_time,
-                                          color: Colors.blue,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: _metricCard(
-                                                title: 'Units',
-                                                value:
-                                                    '${p['unit_count'] ?? 0}',
-                                                icon: Icons.home,
-                                                color: Colors.blue,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: _metricCard(
-                                                title: 'Residents',
-                                                value:
-                                                    '${p['resident_count'] ?? 0}',
-                                                icon: Icons.people,
-                                                color: Colors.green,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: _metricCard(
-                                                title: 'Violations',
-                                                value:
-                                                    '${p['violation_count'] ?? 0}',
-                                                icon: Icons.warning,
-                                                color: Colors.red,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: _metricCard(
-                                                title: 'Codes Used',
-                                                value:
-                                                    '${p['claimed_count'] ?? 0} / ${p['invite_count'] ?? 0}',
-                                                icon: Icons.vpn_key,
-                                                color: Colors.orange,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: _actionCard(
-                                                title: 'Alert All Residents',
-                                                subtitle:
-                                                    'Notify entire property',
-                                                icon: Icons.campaign,
-                                                color: Colors.blue,
-                                                onTap: () =>
-                                                    _openNotificationSender(
-                                                  propertyId: p['id']
-                                                      ?.toString(),
-                                                  mode: 'property',
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: _actionCard(
-                                                title: 'Alert Resident',
-                                                subtitle: 'Send to one user',
-                                                icon: Icons.person,
-                                                color: Colors.purple,
-                                                onTap: () =>
-                                                    _openNotificationSender(
-                                                  propertyId: p['id']
-                                                      ?.toString(),
-                                                  mode: 'user',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )),
-
-                            // Invite codes
-                            if (_inviteCodes.isNotEmpty) ...[
-                              _sectionCard(
-                                title: 'Invite Codes',
-                                icon: Icons.key,
-                                iconColor: Colors.orange,
-                                child: Column(
-                                  children: _inviteCodes
-                                      .map(_inviteCodeRow)
-                                      .toList(),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                            ],
-
-                            // Footer
-                            Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(20),
-                                child: Text(
-                                  'Signed in as: $_email',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
     );
   }
 }

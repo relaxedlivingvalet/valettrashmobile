@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -9,6 +9,7 @@ import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../../core/widgets/stat_tile.dart';
+import 'om_worker_map_screen.dart';
 import 'simple_notification_sender_screen.dart';
 import 'today_comebacks_screen.dart';
 
@@ -231,7 +232,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -247,7 +248,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.12),
+                    color: iconColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: iconColor, size: 24),
@@ -355,6 +356,11 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                   activeIcon: Icons.notifications,
                   label: 'Notify',
                 ),
+                RoleNavItem(
+                  icon: Icons.person_outline,
+                  activeIcon: Icons.person,
+                  label: 'Profile',
+                ),
               ],
             ),
           ],
@@ -371,8 +377,10 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         return _buildWorkersTab();
       case 2:
         return _buildComebacksTabOM();
-      default:
+      case 3:
         return _buildNotifyTabOM();
+      default:
+        return _buildProfileTabOM();
     }
   }
 
@@ -663,7 +671,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: AppColors.worker.withOpacity(0.15),
+            backgroundColor: AppColors.worker.withValues(alpha: 0.15),
             child: Text(
               initial,
               style: TextStyle(
@@ -757,6 +765,22 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(context,
+                    MaterialPageRoute(
+                        builder: (_) => const OmWorkerMapScreen())),
+                icon: const Icon(Icons.map_outlined, size: 16),
+                label: const Text('Live Worker Map'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.manager,
+                  side: const BorderSide(color: AppColors.manager),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 10),
               PrimaryButton(
                 label: 'View Full List',
                 onPressed: () => Navigator.push(
@@ -891,572 +915,151 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     );
   }
 
-  // ── Old build renamed to legacy ───────────────────────────────────────────────
+  // ── Profile tab ───────────────────────────────────────────────────────────────
 
-  Widget _legacyBuild(BuildContext context) {
-    if (_loading) {
-      return Scaffold(
-        backgroundColor: Colors.grey.shade100,
-        appBar: AppBar(
-          title: const Text('Operations Manager'),
-          backgroundColor: Colors.blue.shade700,
-          foregroundColor: Colors.white,
-        ),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      appBar: AppBar(
-        title: const Text('Operations Manager Dashboard'),
-        backgroundColor: Colors.blue.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+  Widget _buildProfileTabOM() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+      children: [
+        // Account card
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface1,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
           ),
-          IconButton(
-            onPressed: _signOut,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign Out',
-          ),
-        ],
-      ),
-      body: _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.manager.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.person, color: AppColors.manager, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.error_outline,
-                        color: Colors.red.shade400, size: 48),
-                    const SizedBox(height: 16),
-                    Text(_error!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red)),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                        onPressed: _loadData,
-                        child: const Text('Retry')),
+                    const Text(
+                      'Operations Manager',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _email,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
-            )
-          : _propertyIds.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.apartment,
-                            color: Colors.grey.shade400, size: 64),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'No properties assigned',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'A super admin must assign you to a property.',
-                          style: TextStyle(color: Colors.grey.shade600),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        OutlinedButton(
-                          onPressed: _signOut,
-                          child: const Text('Sign Out'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadData,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        // Worker Status
-                        _sectionCard(
-                          title: 'Assigned Workers',
-                          icon: Icons.people,
-                          iconColor: Colors.green,
-                          child: _workers.isEmpty
-                              ? _emptyRow('No workers assigned to your properties')
-                              : Column(
-                                  children: _workers.map((w) {
-                                    return _rowTile(
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.green.shade50,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Icon(Icons.person,
-                                            color: Colors.green.shade700,
-                                            size: 18),
-                                      ),
-                                      _workerName(w),
-                                      'Driver',
-                                    );
-                                  }).toList(),
-                                ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Tonight's Runs
-                        _sectionCard(
-                          title: "Tonight's Service Runs",
-                          icon: Icons.task_alt,
-                          iconColor: Colors.blue,
-                          child: _runs.isEmpty
-                              ? _emptyRow('No service runs recorded for tonight yet')
-                              : Column(
-                                  children: _runs.map((run) {
-                                    final status =
-                                        run['status'] as String? ??
-                                            'in_progress';
-                                    final statusColor =
-                                        _runStatusColor(status);
-                                    final statusLabel =
-                                        _runStatusLabel(status);
-                                    final prop = run['properties'];
-                                    final propName = prop is Map
-                                        ? prop['name']?.toString() ??
-                                            'Unknown Property'
-                                        : 'Unknown Property';
-                                    final completed =
-                                        run['completed_units'] as int? ?? 0;
-                                    final total =
-                                        run['total_units'] as int? ?? 0;
-
-                                    return Container(
-                                      padding: const EdgeInsets.all(12),
-                                      margin:
-                                          const EdgeInsets.only(bottom: 8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade50,
-                                        borderRadius:
-                                            BorderRadius.circular(8),
-                                        border: Border.all(
-                                            color: Colors.grey.shade200),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(propName,
-                                                    style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        fontSize: 14)),
-                                                if (total > 0) ...[
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    '$completed / $total units',
-                                                    style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors
-                                                            .grey.shade600),
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                          Container(
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: statusColor
-                                                  .withOpacity(0.12),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              statusLabel,
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: statusColor),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Today's Comebacks summary
-                        _sectionCard(
-                          title: "Today's Comebacks",
-                          icon: Icons.refresh,
-                          iconColor: Colors.orange,
-                          child: InkWell(
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const TodayComebacksScreen(),
-                              ),
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: Colors.grey.shade200),
-                              ),
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Total Requests',
-                                              style: TextStyle(
-                                                  fontSize: 14,
-                                                  color:
-                                                      Colors.grey.shade700,
-                                                  fontWeight:
-                                                      FontWeight.w600),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '${_pendingComebacks + _acceptedComebacks + _completedComebacks}',
-                                              style: const TextStyle(
-                                                  fontSize: 24,
-                                                  fontWeight:
-                                                      FontWeight.bold,
-                                                  color: Colors.black87),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Icon(Icons.arrow_forward_ios,
-                                          color: Colors.grey.shade400,
-                                          size: 20),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      _chip('Pending',
-                                          _pendingComebacks, Colors.orange),
-                                      _chip('In Progress',
-                                          _acceptedComebacks, Colors.blue),
-                                      _chip('Completed',
-                                          _completedComebacks, Colors.green),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Tap to view details',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.orange.shade700,
-                                        fontWeight: FontWeight.w500),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Comeback History (past 7 days)
-                        _sectionCard(
-                          title: 'Comeback History (7 days)',
-                          icon: Icons.history,
-                          iconColor: Colors.purple,
-                          child: _comebackHistory.isEmpty
-                              ? _emptyRow('No resolved comebacks in the last 7 days')
-                              : Column(
-                                  children: _comebackHistory.map((h) {
-                                    final status =
-                                        h['status'] as String? ?? '';
-                                    final date = _formatDate(
-                                        h['completed_at'] as String? ??
-                                            h['created_at'] as String?);
-                                    Color c;
-                                    String label;
-                                    if (status == 'completed') {
-                                      c = Colors.green;
-                                      label = 'Completed';
-                                    } else if (status == 'expired') {
-                                      c = Colors.red;
-                                      label = 'Expired';
-                                    } else {
-                                      c = Colors.orange;
-                                      label = status;
-                                    }
-
-                                    return _rowTile(
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: c.withOpacity(0.12),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Text(label,
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                                color: c)),
-                                      ),
-                                      date,
-                                    );
-                                  }).toList(),
-                                ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Resident Communication
-                        _sectionCard(
-                          title: 'Resident Communication',
-                          icon: Icons.notifications_active,
-                          iconColor: Colors.amber.shade700,
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _actionTile(
-                                      'Alert All Residents',
-                                      'Send property-wide alert',
-                                      Icons.campaign,
-                                      Colors.blue,
-                                      () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const SimpleNotificationSenderScreen(
-                                                  initialMode: 'property'),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: _actionTile(
-                                      'Direct Notification',
-                                      'Send to specific resident',
-                                      Icons.person,
-                                      Colors.purple,
-                                      () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const SimpleNotificationSenderScreen(
-                                                  initialMode: 'user'),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (_sentNotifications.isNotEmpty) ...[
-                                const SizedBox(height: 16),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                        color: Colors.grey.shade200),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Recently Sent',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.grey.shade700,
-                                            fontSize: 13),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      ..._sentNotifications.map((n) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                              bottom: 4),
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.check_circle,
-                                                  size: 14,
-                                                  color:
-                                                      Colors.green.shade600),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  n['title']?.toString() ??
-                                                      'Notification',
-                                                  style: const TextStyle(
-                                                      fontSize: 13),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                _formatDate(n['created_at']
-                                                    as String?),
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors
-                                                        .grey.shade500),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Property Services placeholders
-                        _sectionCard(
-                          title: 'Property Services',
-                          icon: Icons.cleaning_services,
-                          iconColor: Colors.cyan.shade700,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _actionTile(
-                                  'Power Washing',
-                                  'Coming soon',
-                                  Icons.water_drop,
-                                  Colors.blue,
-                                  () => _showMessage(
-                                      'Power washing management coming soon'),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _actionTile(
-                                  'Property Cleanup',
-                                  'Coming soon',
-                                  Icons.cleaning_services,
-                                  Colors.green,
-                                  () => _showMessage(
-                                      'Property cleanup coming soon'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Footer
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Signed in as: $_email',
-                                style: TextStyle(
-                                    color: Colors.grey.shade700,
-                                    fontSize: 14),
-                              ),
-                              Text(
-                                '${_propertyIds.length} propert${_propertyIds.length == 1 ? 'y' : 'ies'} · ${_workers.length} worker${_workers.length == 1 ? '' : 's'}',
-                                style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 13),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-    );
-  }
-
-  Widget _chip(String label, int count, Color color) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        '$label: $count',
-        style: TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w600, color: color),
-      ),
-    );
-  }
-
-  Widget _actionTile(String title, String subtitle, IconData icon,
-      Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+              GlowBadge(label: 'OM', accent: AppColors.manager, showDot: false),
+            ],
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 8),
-            Text(title,
+
+        const SizedBox(height: 24),
+
+        const _DarkSectionLabel(text: 'ACCOUNT'),
+        const SizedBox(height: 12),
+
+        // Properties stat
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surface1,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.apartment_outlined,
+                  color: AppColors.textMuted, size: 18),
+              const SizedBox(width: 12),
+              const Text(
+                'Assigned Properties',
+                style: TextStyle(
+                    color: AppColors.textSecondary, fontSize: 14),
+              ),
+              const Spacer(),
+              Text(
+                '${_propertyIds.length}',
                 style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 13)),
-            const SizedBox(height: 2),
-            Text(subtitle,
-                style:
-                    TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-          ],
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
+
+        const SizedBox(height: 10),
+
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surface1,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.people_outline,
+                  color: AppColors.textMuted, size: 18),
+              const SizedBox(width: 12),
+              const Text(
+                'Workers Managed',
+                style: TextStyle(
+                    color: AppColors.textSecondary, fontSize: 14),
+              ),
+              const Spacer(),
+              Text(
+                '${_workers.length}',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 28),
+
+        const _DarkSectionLabel(text: 'SESSION'),
+        const SizedBox(height: 12),
+
+        // Sign out button
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _signOut,
+            icon: const Icon(Icons.logout, size: 18),
+            label: const Text('Sign Out'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.error,
+              side: BorderSide(color: AppColors.error.withValues(alpha: 0.4)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

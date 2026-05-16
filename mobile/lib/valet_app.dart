@@ -104,11 +104,17 @@ class _RoleHomeState extends State<RoleHome> {
       case 'driver':
         return const WorkerDashboardScreen();
       case 'property_manager':
-        return const PropertyManagerDashboardNewScreen();
+        return Theme(
+          data: AppTheme.light,
+          child: const PropertyManagerDashboardNewScreen(),
+        );
       case 'operations_manager':
         return const ManagerDashboardScreen();
       case 'super_admin':
-        return const OwnerDashboardScreen();
+        return Theme(
+          data: AppTheme.light,
+          child: const OwnerDashboardScreen(),
+        );
       case 'resident':
       default:
         return const ResidentDashboardScreen();

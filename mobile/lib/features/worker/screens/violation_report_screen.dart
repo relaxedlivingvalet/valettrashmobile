@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -166,7 +166,7 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
 
   void _snackError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: AppColors.error.withOpacity(0.9),
+      backgroundColor: AppColors.error.withValues(alpha: 0.9),
       content: Text(msg, style: const TextStyle(color: Colors.white)),
     ));
   }
@@ -486,12 +486,12 @@ class _ViolationReportScreenState extends State<ViolationReportScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? AppColors.error.withOpacity(0.08)
+                      ? AppColors.error.withValues(alpha: 0.08)
                       : AppColors.surface1,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
-                        ? AppColors.error.withOpacity(0.5)
+                        ? AppColors.error.withValues(alpha: 0.5)
                         : AppColors.border,
                     width: isSelected ? 1.5 : 1,
                   ),

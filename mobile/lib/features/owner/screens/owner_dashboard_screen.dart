@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -29,6 +29,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
 
   List<Map<String, dynamic>> _properties = [];
 
+  AppColorsScheme _c = AppColorsScheme.dark;
+
   int get _totalProperties => _properties.length;
   int get _totalUnits =>
       _properties.fold(0, (s, p) => s + (p['unit_count'] as int? ?? 0));
@@ -38,6 +40,12 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       _properties.fold(0, (s, p) => s + (p['invite_count'] as int? ?? 0));
   int get _totalInvitesUsed =>
       _properties.fold(0, (s, p) => s + (p['claimed_count'] as int? ?? 0));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _c = context.roleColors;
+  }
 
   @override
   void initState() {
@@ -167,7 +175,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: _c.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -224,7 +232,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     if (_loading) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-        children: const [
+        children: [
           SkeletonCard(height: 128),
           SizedBox(height: 12),
           SkeletonCard(height: 60),
@@ -244,7 +252,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             const SizedBox(height: 16),
             Text(
               _error!,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: _c.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -259,7 +267,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppColors.owner,
-      backgroundColor: AppColors.surface1,
+      backgroundColor: _c.surface1,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
         children: [
@@ -312,7 +320,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   onPressed: () => setState(() => _tabIndex = 1),
                   child: Text(
                     'View all ${_properties.length} properties →',
-                    style: const TextStyle(color: AppColors.owner),
+                    style: TextStyle(color: AppColors.owner),
                   ),
                 ),
               ),
@@ -332,9 +340,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface1,
+        color: _c.surface1,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: _c.border),
       ),
       child: Row(
         children: [
@@ -342,7 +350,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.owner.withOpacity(0.12),
+              color: AppColors.owner.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.apartment_outlined,
@@ -355,17 +363,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               children: [
                 Text(
                   p['name']?.toString() ?? 'Property',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: _c.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '$residents / $units residents',
-                  style: const TextStyle(
-                      fontSize: 11, color: AppColors.textSecondary),
+                  style: TextStyle(
+                      fontSize: 11, color: _c.textSecondary),
                 ),
               ],
             ),
@@ -390,13 +398,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'All Properties',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: _c.textPrimary,
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -413,7 +421,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: const [
+              children: [
                 SkeletonCard(height: 160),
                 SizedBox(height: 12),
                 SkeletonCard(height: 160),
@@ -425,16 +433,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(Icons.apartment_outlined,
-                      size: 56, color: AppColors.textMuted),
+                      size: 56, color: _c.textMuted),
                   SizedBox(height: 16),
                   Text(
                     'No properties found',
                     style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary),
+                        color: _c.textPrimary),
                   ),
                 ],
               ),
@@ -445,7 +453,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: RefreshIndicator(
               onRefresh: _loadData,
               color: AppColors.owner,
-              backgroundColor: AppColors.surface1,
+              backgroundColor: _c.surface1,
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 itemCount: _properties.length,
@@ -471,10 +479,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface1,
+        color: _c.surface1,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppColors.owner.withOpacity(0.2),
+          color: AppColors.owner.withValues(alpha: 0.2),
         ),
       ),
       child: Column(
@@ -488,18 +496,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   children: [
                     Text(
                       p['name']?.toString() ?? 'Property',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: _c.textPrimary,
                       ),
                     ),
                     if (hasLocation) ...[
                       const SizedBox(height: 2),
                       Text(
                         location,
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.textSecondary),
+                        style: TextStyle(
+                            fontSize: 12, color: _c.textSecondary),
                       ),
                     ],
                   ],
@@ -526,13 +534,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.access_time_outlined,
-                  size: 13, color: AppColors.textMuted),
+              Icon(Icons.access_time_outlined,
+                  size: 13, color: _c.textMuted),
               const SizedBox(width: 4),
               Text(
                 p['service_window']?.toString() ?? '--',
-                style: const TextStyle(
-                    fontSize: 11, color: AppColors.textSecondary),
+                style: TextStyle(
+                    fontSize: 11, color: _c.textSecondary),
               ),
             ],
           ),
@@ -553,7 +561,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               label: const Text('Alert All Residents'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.owner,
-                side: BorderSide(color: AppColors.owner.withOpacity(0.4)),
+                side: BorderSide(color: AppColors.owner.withValues(alpha: 0.4)),
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
@@ -571,7 +579,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     if (_loading) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-        children: const [
+        children: [
           SkeletonCard(height: 200),
           SizedBox(height: 16),
           SkeletonCard(height: 160),
@@ -593,11 +601,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         const _OwnerSectionLabel(text: 'OCCUPANCY BY PROPERTY'),
         const SizedBox(height: 12),
         if (_properties.isEmpty)
-          const Center(
+          Center(
             child: Text(
               'No data yet',
               style:
-                  TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  TextStyle(fontSize: 14, color: _c.textSecondary),
             ),
           )
         else
@@ -620,9 +628,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface1,
+        color: _c.surface1,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: _c.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,17 +640,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               Expanded(
                 child: Text(
                   p['name']?.toString() ?? 'Property',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: _c.textPrimary,
                   ),
                 ),
               ),
               Text(
                 '$residents / $units',
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(
+                    fontSize: 12, color: _c.textSecondary),
               ),
               const SizedBox(width: 8),
               Text(
@@ -661,7 +669,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: LinearProgressIndicator(
               value: pct.clamp(0.0, 1.0),
               minHeight: 6,
-              backgroundColor: AppColors.border,
+              backgroundColor: _c.border,
               valueColor: AlwaysStoppedAnimation<Color>(
                 pct >= 0.5 ? AppColors.success : AppColors.warning,
               ),
@@ -679,29 +687,29 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface1,
+        color: _c.surface1,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: _c.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Invite Codes',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: _c.textPrimary,
                   ),
                 ),
               ),
               Text(
                 '$_totalInvitesUsed / $_totalInvitesIssued used',
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(
+                    fontSize: 12, color: _c.textSecondary),
               ),
             ],
           ),
@@ -711,7 +719,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: LinearProgressIndicator(
               value: activationPct.clamp(0.0, 1.0),
               minHeight: 6,
-              backgroundColor: AppColors.border,
+              backgroundColor: _c.border,
               valueColor:
                   const AlwaysStoppedAnimation<Color>(AppColors.owner),
             ),
@@ -725,7 +733,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               _analyticsBadge(
                   '${_totalInvitesIssued - _totalInvitesUsed}',
                   'Unclaimed',
-                  AppColors.textMuted),
+                  _c.textMuted),
               const SizedBox(width: 8),
               _analyticsBadge(
                   '${(activationPct * 100).toStringAsFixed(1)}%',
@@ -743,9 +751,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.07),
+          color: color.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.15)),
+          border: Border.all(color: color.withValues(alpha: 0.15)),
         ),
         child: Column(
           children: [
@@ -758,10 +766,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             ),
             Text(
               label.toUpperCase(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 7,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textMuted,
+                color: _c.textMuted,
                 letterSpacing: 0.8,
               ),
             ),
@@ -778,14 +786,14 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Text(
             'Settings',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+              color: _c.textPrimary,
               letterSpacing: -0.5,
             ),
           ),
@@ -797,18 +805,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.surface1,
+                  color: _c.surface1,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: _c.border),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: AppColors.owner.withOpacity(0.15),
+                      backgroundColor: AppColors.owner.withValues(alpha: 0.15),
                       child: Text(
                         initial,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.owner,
                           fontWeight: FontWeight.w700,
                           fontSize: 20,
@@ -822,18 +830,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         children: [
                           Text(
                             _email,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
+                              color: _c.textPrimary,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             '$_totalProperties propert${_totalProperties == 1 ? 'y' : 'ies'}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textSecondary,
+                              color: _c.textSecondary,
                             ),
                           ),
                         ],
@@ -919,9 +927,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.surface1,
+          color: _c.surface1,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: _c.border),
         ),
         child: Row(
           children: [
@@ -929,7 +937,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, size: 18, color: color),
@@ -938,15 +946,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  color: _c.textPrimary,
                 ),
               ),
             ),
-            const Icon(Icons.chevron_right,
-                size: 18, color: AppColors.textMuted),
+            Icon(Icons.chevron_right,
+                size: 18, color: _c.textMuted),
           ],
         ),
       ),
@@ -960,9 +968,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
+          color: color.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.15)),
+          border: Border.all(color: color.withValues(alpha: 0.15)),
         ),
         child: Column(
           children: [
@@ -976,10 +984,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             ),
             Text(
               label.toUpperCase(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 7,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textMuted,
+                color: _c.textMuted,
                 letterSpacing: 0.8,
               ),
             ),
@@ -998,10 +1006,10 @@ class _OwnerSectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        color: AppColors.textMuted,
+        color: context.roleColors.textMuted,
         letterSpacing: 1.2,
       ),
     );

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class RoleNavItem {
@@ -29,10 +29,11 @@ class RoleBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.roleColors;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface1,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        border: Border(top: BorderSide(color: c.border, width: 1)),
       ),
       child: SafeArea(
         top: false,
@@ -53,13 +54,13 @@ class RoleBottomNav extends StatelessWidget {
                         duration: const Duration(milliseconds: 180),
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isActive ? accent.withOpacity(0.12) : Colors.transparent,
+                          color: isActive ? accent.withValues(alpha: 0.12) : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           isActive ? item.activeIcon : item.icon,
                           size: 22,
-                          color: isActive ? accent : AppColors.textMuted,
+                          color: isActive ? accent : c.textMuted,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -68,7 +69,7 @@ class RoleBottomNav extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: isActive ? accent : AppColors.textMuted,
+                          color: isActive ? accent : c.textMuted,
                           letterSpacing: 0.02,
                         ),
                       ),

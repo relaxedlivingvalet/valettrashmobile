@@ -1,4 +1,9 @@
+﻿import 'dart:typed_data';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -10,6 +15,8 @@ import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../../core/widgets/stat_tile.dart';
 import 'violation_report_screen.dart';
+import 'worker_earnings_screen.dart';
+import 'worker_route_map_screen.dart';
 
 class WorkerDashboardScreen extends StatefulWidget {
   const WorkerDashboardScreen({super.key});
@@ -26,7 +33,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
   String _assignedProperty = 'No property assigned';
   String _assignedRoute = 'No active route';
   List<Map<String, dynamic>> _comebackRequests = [];
-  Set<String> _propertyIds = {};
+  String? _propertyId;
 
   @override
   void initState() {
@@ -61,7 +68,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
         if (pid != null) propertyIds.add(pid);
       }
       if (names.isNotEmpty) _assignedProperty = names.join(', ');
-      _propertyIds = propertyIds;
+      if (propertyIds.isNotEmpty) _propertyId = propertyIds.first;
 
       final routes = await client
           .from('routes')
@@ -137,15 +144,218 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     }
   }
 
+  // Shows a bottom sheet with optional photo before marking comeback complete
+  Future<void> _showCompleteSheet(int index) async {
+    Uint8List? photoBytes;
+    String? photoName;
+    bool uploading = false;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface1,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 28,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Mark Pickup Complete',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Optionally add a proof-of-pickup photo',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Photo area
+                GestureDetector(
+                  onTap: () async {
+                    try {
+                      final file = await ImagePicker().pickImage(
+                        source: ImageSource.gallery,
+                        maxWidth: 1280,
+                        imageQuality: 82,
+                      );
+                      if (file == null) return;
+                      final bytes = await file.readAsBytes();
+                      setSheetState(() {
+                        photoBytes = bytes;
+                        photoName = file.name;
+                      });
+                    } catch (_) {}
+                  },
+                  child: Container(
+                    height: photoBytes != null ? null : 100,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface2,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: photoBytes != null
+                            ? AppColors.success.withValues(alpha: 0.4)
+                            : AppColors.border,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: photoBytes != null
+                        ? Image.memory(photoBytes!, fit: BoxFit.cover)
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.add_a_photo_outlined,
+                                  color: AppColors.textMuted, size: 28),
+                              SizedBox(height: 6),
+                              Text(
+                                'Add photo (optional)',
+                                style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 13),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          side: const BorderSide(color: AppColors.border),
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: uploading
+                            ? null
+                            : () async {
+                                setSheetState(() => uploading = true);
+                                // Upload photo if selected
+                                if (photoBytes != null &&
+                                    photoName != null) {
+                                  try {
+                                    final uid = Supabase
+                                        .instance.client.auth.currentUser?.id;
+                                    final ext =
+                                        photoName!.split('.').last;
+                                    final path =
+                                        'pickup_proofs/$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
+                                    await Supabase.instance.client.storage
+                                        .from('violations')
+                                        .uploadBinary(path, photoBytes!);
+                                  } catch (_) {}
+                                }
+                                Navigator.pop(ctx);
+                                _completeComebackRequest(index);
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                          foregroundColor: Colors.white,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          uploading ? 'Uploading…' : 'Mark Done',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _signOut() async {
     await Supabase.instance.client.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  void _toggleDuty() {
-    setState(() => _isOnDuty = !_isOnDuty);
-    _snack(_isOnDuty ? 'You are now on duty' : 'You are now off duty');
+  Future<void> _toggleDuty() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    final newState = !_isOnDuty;
+    setState(() => _isOnDuty = newState);
+    try {
+      await Supabase.instance.client.from('clock_events').insert({
+        'user_id': uid,
+        'event_type': newState ? 'clock_in' : 'clock_out',
+        'property_id': _propertyId,
+      });
+    } catch (_) {
+      // Non-blocking — UI state already updated
+    }
+    _snack(newState ? 'You are now on duty' : 'You are now off duty');
+  }
+
+  Future<void> _shareLocation() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final pos = await html.window.navigator.geolocation
+          .getCurrentPosition()
+          .timeout(const Duration(seconds: 10));
+      final lat = pos.coords!.latitude!.toDouble();
+      final lng = pos.coords!.longitude!.toDouble();
+      await Supabase.instance.client.from('worker_locations').upsert({
+        'user_id': uid,
+        'property_id': _propertyId,
+        'latitude': lat,
+        'longitude': lng,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      _snack('Location shared');
+    } catch (e) {
+      _snack('Could not get location: $e');
+    }
   }
 
   void _snack(String msg) {
@@ -270,6 +480,40 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
             accent: _isOnDuty ? AppColors.error : AppColors.worker,
             icon: _isOnDuty ? Icons.stop_circle_outlined : Icons.play_circle_outline,
           ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              SharedAxisPageRoute(
+                builder: (_) => WorkerRouteMapScreen(
+                  propertyName: _assignedProperty,
+                  comebacks: _comebackRequests,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.map_outlined, size: 18),
+            label: const Text('View Route Map'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _isOnDuty ? _shareLocation : null,
+            icon: const Icon(Icons.my_location, size: 16),
+            label: const Text('Share My Location'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.worker,
+              side: const BorderSide(color: AppColors.worker),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
           if (!_isOnDuty) ...[
             const SizedBox(height: 12),
             const Text(
@@ -386,7 +630,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.warning.withOpacity(0.12),
+              color: AppColors.warning.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
@@ -421,7 +665,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
           ),
           if (status != 'completed')
             TextButton(
-              onPressed: () => _completeComebackRequest(index),
+              onPressed: () => _showCompleteSheet(index),
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.success,
                 padding: const EdgeInsets.symmetric(
@@ -516,7 +760,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: AppColors.worker.withOpacity(0.15),
+                      backgroundColor: AppColors.worker.withValues(alpha: 0.15),
                       child: Text(
                         initial,
                         style: TextStyle(
@@ -556,6 +800,42 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                       showDot: _isOnDuty,
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface1,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.worker.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.attach_money_outlined,
+                        color: AppColors.worker, size: 20),
+                  ),
+                  title: const Text('Earnings & Hours',
+                      style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Clock history and weekly totals',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right,
+                      color: AppColors.textMuted, size: 20),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const WorkerEarningsScreen())),
                 ),
               ),
               const SizedBox(height: 24),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class GlowBadge extends StatelessWidget {
   const GlowBadge({
@@ -17,9 +17,9 @@ class GlowBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: accent.withOpacity(0.12),
+        color: accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accent.withOpacity(0.30)),
+        border: Border.all(color: accent.withValues(alpha: 0.30)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -33,7 +33,7 @@ class GlowBadge extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: accent.withOpacity(0.60),
+                    color: accent.withValues(alpha: 0.60),
                     blurRadius: 6,
                     spreadRadius: 0,
                   ),

@@ -15,13 +15,14 @@ class StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.roleColors;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.surface1,
+          color: c.surface1,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: c.border),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -31,17 +32,17 @@ class StatTile extends StatelessWidget {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
-                color: valueColor ?? AppColors.textPrimary,
+                color: valueColor ?? c.textPrimary,
                 letterSpacing: -0.04 * 20,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               label.toUpperCase(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 8,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textMuted,
+                color: c.textMuted,
                 letterSpacing: 1.0,
               ),
             ),

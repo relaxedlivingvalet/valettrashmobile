@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class PrimaryButton extends StatefulWidget {
@@ -34,7 +34,7 @@ class _PrimaryButtonState extends State<PrimaryButton> {
   @override
   Widget build(BuildContext context) {
     final isEnabled = widget.onPressed != null && !widget.isLoading;
-    final effectiveAccent = isEnabled ? widget.accent : widget.accent.withOpacity(0.4);
+    final effectiveAccent = isEnabled ? widget.accent : widget.accent.withValues(alpha: 0.4);
 
     return GestureDetector(
       onTapDown: _handleTapDown,

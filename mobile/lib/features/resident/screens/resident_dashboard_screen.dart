@@ -1,3 +1,5 @@
+﻿import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,6 +10,8 @@ import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../../core/widgets/stat_tile.dart';
+import 'resident_report_missed_pickup_screen.dart';
+import 'resident_vacation_hold_screen.dart';
 import 'resident_violations_screen.dart';
 
 class ResidentDashboardScreen extends StatefulWidget {
@@ -38,11 +42,50 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   bool _notifLoading = false;
   bool _notifLoaded = false;
 
+  // Pickup status banner
+  String? _runStatus; // 'pending', 'in_progress', 'completed'
+  String? _propertyId;
+  Timer? _statusTimer;
+  bool _bannerDismissed = false;
+
   @override
   void initState() {
     super.initState();
     _email = Supabase.instance.client.auth.currentUser?.email ?? '';
     _load();
+    // Poll pickup status every 30 seconds
+    _statusTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _propertyId != null) _pollRunStatus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _pollRunStatus() async {
+    if (_propertyId == null) return;
+    try {
+      final now = DateTime.now();
+      final todayStr =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final row = await Supabase.instance.client
+          .from('nightly_runs')
+          .select('status')
+          .eq('property_id', _propertyId!)
+          .eq('run_date', todayStr)
+          .maybeSingle();
+      if (row == null) return;
+      final newStatus = row['status']?.toString();
+      if (newStatus != null && newStatus != _runStatus) {
+        if (mounted) setState(() {
+          _runStatus = newStatus;
+          _bannerDismissed = false;
+        });
+      }
+    } catch (_) {}
   }
 
   // ── Data ────────────────────────────────────────────────────────────────────
@@ -137,6 +180,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
 
       if (prop != null && assignmentMap != null) {
         _propertyName = prop['name']?.toString() ?? '';
+        _propertyId = assignmentMap['property_id']?.toString();
         _comebackFee = prop['comeback_pickup_fee'] is num
             ? prop['comeback_pickup_fee'] as num
             : 15;
@@ -185,6 +229,8 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
 
       // Pre-load notifications for the preview card
       if (!_notifLoaded) _loadNotifications();
+      // Initial pickup status check
+      if (_propertyId != null) _pollRunStatus();
     } catch (e) {
       setState(() {
         _loading = false;
@@ -318,6 +364,9 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
                 showDot: false,
               ),
             ),
+          if (!_bannerDismissed && _runStatus != null &&
+              _runStatus != 'pending')
+            _buildPickupStatusBanner(),
           _buildGreeting(),
           const SizedBox(height: 20),
           RoleHeroCard(
@@ -353,6 +402,48 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     );
   }
 
+  Widget _buildPickupStatusBanner() {
+    final isInProgress = _runStatus == 'in_progress';
+    final color = isInProgress ? AppColors.warning : AppColors.success;
+    final icon = isInProgress ? Icons.local_shipping_outlined : Icons.check_circle_outline;
+    final message = isInProgress
+        ? 'Your porter is collecting now'
+        : 'Pickup complete for tonight';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _bannerDismissed = true),
+              child: const Icon(Icons.close,
+                  color: AppColors.textMuted, size: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildGreeting() {
     final initial =
         _residentName.isNotEmpty ? _residentName[0].toUpperCase() : 'R';
@@ -360,7 +451,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       children: [
         CircleAvatar(
           radius: 20,
-          backgroundColor: AppColors.resident.withOpacity(0.15),
+          backgroundColor: AppColors.resident.withValues(alpha: 0.15),
           child: Text(
             initial,
             style: TextStyle(
@@ -411,11 +502,17 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
           _actionRow(
             icon: Icons.replay_outlined,
             iconColor: AppColors.resident,
-            title: 'Request Comeback',
+            title: 'Report Missed Pickup',
             subtitle: _freeRemain > 0
                 ? 'Free ($_freeRemain remaining)'
                 : 'Fees may apply — \$${_comebackFee.toStringAsFixed(0)}',
-            onTap: () => _snack('Comeback requests — coming soon'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    const ResidentReportMissedPickupScreen(),
+              ),
+            ),
           ),
           Divider(height: 1, color: AppColors.border),
           _actionRow(
@@ -505,7 +602,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.info.withOpacity(0.12),
+              color: AppColors.info.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child:
@@ -645,7 +742,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: typeColor.withOpacity(0.12),
+              color: typeColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -732,7 +829,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: AppColors.resident.withOpacity(0.15),
+                      backgroundColor: AppColors.resident.withValues(alpha: 0.15),
                       child: Text(
                         initial,
                         style: TextStyle(
@@ -823,6 +920,43 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
                   ),
                 ),
               ],
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface1,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.beach_access_outlined,
+                        color: AppColors.warning, size: 20),
+                  ),
+                  title: const Text('Vacation Hold',
+                      style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Pause pickups while away',
+                      style:
+                          TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right,
+                      color: AppColors.textMuted, size: 20),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              const ResidentVacationHoldScreen())),
+                ),
+              ),
               const SizedBox(height: 24),
               PrimaryButton(
                 label: 'Sign Out',

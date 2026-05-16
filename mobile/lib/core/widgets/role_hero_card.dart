@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import 'glow_badge.dart';
 
@@ -28,9 +28,9 @@ class RoleHeroCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: accent.withOpacity(0.07),
+        color: accent.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accent.withOpacity(0.18)),
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -42,7 +42,7 @@ class RoleHeroCard extends StatelessWidget {
               fontSize: 9,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.26,
-              color: accent.withOpacity(0.80),
+              color: accent.withValues(alpha: 0.80),
             ),
           ),
           const SizedBox(height: 4),
