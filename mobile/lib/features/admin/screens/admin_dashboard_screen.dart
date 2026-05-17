@@ -1,14 +1,9 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../auth/screens/change_password_screen.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/role_theme.dart';
-import '../../../core/widgets/glow_badge.dart';
-import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import 'admin_invite_codes_screen.dart';
@@ -1431,6 +1426,7 @@ class _AdminComebacksScreenState extends State<_AdminComebacksScreen> {
           .update({'status': status}).eq('id', id);
       _load();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed: $e')));
     }
@@ -1681,6 +1677,7 @@ class _AdminWorkerAssignmentsScreenState
           .update({'is_active': false}).eq('id', id);
       _load();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Failed: $e')));
     }
@@ -1695,12 +1692,14 @@ class _AdminWorkerAssignmentsScreenState
         'is_active': true,
       }, onConflict: 'user_id,property_id');
       _load();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Worker assigned'),
             backgroundColor: AppColors.success),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Failed: $e')));
     }

@@ -1,7 +1,7 @@
 # Current State
 
 ## Current Objective
-**App Store / Play Store ready.** All features complete. Native Android and iOS platform directories generated and configured. Final RLV app icon installed and platform icons/splash regenerated. Waiting on Apple Developer account before iOS submission.
+**All 5 role dashboards rebuilt to RLV brand spec.** Features complete. Native Android/iOS platform directories configured. Final RLV app icon installed. `flutter analyze` — 0 errors in all 5 dashboard files. Waiting on Apple Developer account before iOS submission.
 
 ## Run the App
 ```powershell
@@ -116,3 +116,8 @@ Full list in `brain/test_credentials.md`. Quick reference:
 - `withOpacity` deprecation warnings (info only, not errors) — use `.withValues(alpha: ...)` to silence
 - `PmComplianceReportScreen` uses `dart:html` for CSV export — web only; will need `dart:io` path for native builds
 - Worker location sharing uses `dart:html` geolocation — web only; needs `geolocator` package for native
+- `simple_auth_screen.dart`: 2× `signInWithIdToken is experimental` — Supabase-controlled API, not fixable on our end; all other warnings resolved
+
+### Shared Widgets Added (Session 12)
+- `lib/core/widgets/bento_card.dart` — dark card used across all 5 dashboards
+- `lib/core/widgets/metric_tile.dart` — metric display widget

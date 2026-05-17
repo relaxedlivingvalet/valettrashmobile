@@ -1,7 +1,11 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/bento_card.dart';
+import '../../../core/widgets/metric_tile.dart';
 import '../../auth/screens/change_password_screen.dart';
 import '../../../core/utils/page_transitions.dart';
 import '../../../core/widgets/glow_badge.dart';
@@ -35,6 +39,11 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
   int _completedComebacks = 0;
   List<Map<String, dynamic>> _comebackHistory = [];
   List<Map<String, dynamic>> _sentNotifications = [];
+  String? _firstName;
+
+  // Chart data
+  List<FlSpot> _serviceCompletionSpots = [];
+  List<String> _dateLabels = [];
 
   @override
   void initState() {
@@ -55,6 +64,16 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         return;
       }
       _email = supabase.auth.currentUser?.email ?? '';
+
+      // Load profile name
+      try {
+        final profile = await supabase
+            .from('users')
+            .select('first_name')
+            .eq('id', uid)
+            .maybeSingle();
+        if (profile != null) _firstName = profile['first_name']?.toString();
+      } catch (_) {}
 
       final userPropsRows = await supabase
           .from('user_properties')
@@ -136,6 +155,34 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         }
       }
 
+      // Build 7-day completion chart
+      final spots = <FlSpot>[];
+      final labels = <String>[];
+      try {
+        final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 6));
+        final runsForChart = await supabase
+            .from('nightly_runs')
+            .select('run_date, status')
+            .gte('run_date', '${sevenDaysAgo.year}-${sevenDaysAgo.month.toString().padLeft(2,'0')}-${sevenDaysAgo.day.toString().padLeft(2,'0')}')
+            .filter('property_id', 'in', '(${propIds.join(',')})')
+            .order('run_date');
+        final Map<String, int> completedByDay = {};
+        for (final r in (runsForChart as List)) {
+          if (r['status'] == 'completed') {
+            final day = (r['run_date'] as String).substring(0, 10);
+            completedByDay[day] = (completedByDay[day] ?? 0) + 1;
+          }
+        }
+        for (int i = 6; i >= 0; i--) {
+          final day = DateTime.now().subtract(Duration(days: i));
+          final key =
+              '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+          spots.add(FlSpot((6 - i).toDouble(),
+              (completedByDay[key] ?? 0).toDouble()));
+          labels.add('${day.month}/${day.day}');
+        }
+      } catch (_) {}
+
       setState(() {
         _workers = uniqueWorkers;
         _runs = runRows;
@@ -147,6 +194,8 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
             comebackRows.where((r) => r['status'] == 'completed').length;
         _comebackHistory = historyRows;
         _sentNotifications = notifRows;
+        _serviceCompletionSpots = spots;
+        _dateLabels = labels;
         _loading = false;
       });
     } catch (e) {
@@ -263,13 +312,11 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: const [
-          SkeletonCard(height: 128),
-          SizedBox(height: 12),
           SkeletonCard(height: 60),
-          SizedBox(height: 16),
-          SkeletonCard(height: 90),
-          SizedBox(height: 16),
-          SkeletonCard(height: 90),
+          SizedBox(height: 12),
+          SkeletonCard(height: 120),
+          SizedBox(height: 12),
+          SkeletonCard(height: 200),
         ],
       );
     }
@@ -278,7 +325,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Icon(Icons.apartment_outlined, size: 56, color: AppColors.textMuted),
+            Icon(Icons.apartment_outlined, size: 56, color: AppColors.textSecondary),
             SizedBox(height: 16),
             Text(
               'No properties assigned',
@@ -297,51 +344,195 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         ),
       );
     }
-    final totalComebacks =
-        _pendingComebacks + _acceptedComebacks + _completedComebacks;
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppColors.manager,
       backgroundColor: AppColors.surface1,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: [
-          RoleHeroCard(
-            accent: AppColors.manager,
-            eyebrow: "TONIGHT'S OPERATIONS",
-            title: '${_runs.length} Service Run${_runs.length == 1 ? '' : 's'}',
-            subtitle:
-                '${_workers.length} worker${_workers.length == 1 ? '' : 's'} · $totalComebacks comebacks',
-            badgeLabel: _error != null ? 'Error' : 'Operations Manager',
-            showDot: _error == null,
-          ),
-          const SizedBox(height: 12),
+          // Greeting
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              StatTile(value: '${_workers.length}', label: 'Workers'),
-              const SizedBox(width: 8),
-              StatTile(value: '${_runs.length}', label: 'Runs'),
-              const SizedBox(width: 8),
-              StatTile(
-                value: '$_pendingComebacks',
-                label: 'Pending',
-                valueColor: _pendingComebacks > 0 ? AppColors.warning : null,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Operations',
+                      style: GoogleFonts.inter(
+                          fontSize: 13, color: AppColors.textSecondary)),
+                  Text(
+                    _firstName ?? 'Manager',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary),
+                  ),
+                ],
+              ),
+              GlowBadge(
+                label: _error != null ? 'Error' : 'Ops Manager',
+                accent: _error != null ? AppColors.error : AppColors.rlvBlue,
+                showDot: _error == null,
               ),
             ],
           ),
           const SizedBox(height: 20),
+          // 2×2 bento metrics
+          Row(
+            children: [
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Properties',
+                    value: '${_propertyIds.length}',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Workers',
+                    value: '${_workers.length}',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Runs Today',
+                    value: '${_runs.length}',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Comebacks',
+                    value: '$_pendingComebacks',
+                    valueColor: _pendingComebacks > 0
+                        ? AppColors.warning
+                        : AppColors.textPrimary,
+                    subtitle: 'pending',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // 7-day completion line chart
+          if (_serviceCompletionSpots.isNotEmpty)
+            BentoCard(
+              height: 200,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '7-DAY COMPLETIONS',
+                    style: GoogleFonts.inter(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                        color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: LineChart(
+                      LineChartData(
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          getDrawingHorizontalLine: (_) => FlLine(
+                            color: AppColors.border,
+                            strokeWidth: 0.5,
+                          ),
+                        ),
+                        titlesData: FlTitlesData(
+                          leftTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false)),
+                          rightTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false)),
+                          topTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false)),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              interval: 2,
+                              getTitlesWidget: (value, meta) {
+                                final idx = value.toInt();
+                                if (idx < 0 || idx >= _dateLabels.length) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    _dateLabels[idx],
+                                    style: GoogleFonts.inter(
+                                        fontSize: 9,
+                                        color: AppColors.textSecondary),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots: _serviceCompletionSpots,
+                            isCurved: true,
+                            color: AppColors.rlvBlue,
+                            barWidth: 2,
+                            dotData: FlDotData(show: false),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              color: AppColors.rlvBlue.withValues(alpha: 0.08),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (_serviceCompletionSpots.isNotEmpty) const SizedBox(height: 20),
           if (_runs.isNotEmpty) ...[
-            const _DarkSectionLabel(text: "TONIGHT'S RUNS"),
+            _sectionLabel("TONIGHT'S RUNS"),
             const SizedBox(height: 8),
             ..._runs.map((run) => _buildRunCard(run)),
             const SizedBox(height: 20),
           ],
           if (_comebackHistory.isNotEmpty) ...[
-            const _DarkSectionLabel(text: 'COMEBACK HISTORY (7 DAYS)'),
+            _sectionLabel('COMEBACK HISTORY (7 DAYS)'),
             const SizedBox(height: 8),
             ..._comebackHistory.take(5).map((h) => _buildHistoryCard(h)),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.inter(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.2,
+        color: AppColors.textSecondary,
       ),
     );
   }
@@ -381,7 +572,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                 children: [
                   Text(
                     propName,
-                    style: const TextStyle(
+                    style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
@@ -391,7 +582,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                     const SizedBox(height: 4),
                     Text(
                       '$completed / $total units',
-                      style: const TextStyle(
+                      style: GoogleFonts.inter(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                       ),

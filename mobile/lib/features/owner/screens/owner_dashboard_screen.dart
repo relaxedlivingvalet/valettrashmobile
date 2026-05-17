@@ -1,13 +1,14 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/bento_card.dart';
 import '../../../core/widgets/glow_badge.dart';
+import '../../../core/widgets/metric_tile.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
-import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
-import '../../../core/widgets/stat_tile.dart';
 import '../../manager/screens/manager_dashboard_screen.dart';
 import '../../manager/screens/property_manager_dashboard_new.dart';
 import '../../manager/screens/simple_notification_sender_screen.dart';
@@ -28,6 +29,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   String _email = '';
 
   List<Map<String, dynamic>> _properties = [];
+  int _completedComebacks = 0;
+  double _avgSatisfaction = 0;
+  String? _firstName;
 
   AppColorsScheme _c = AppColorsScheme.dark;
 
@@ -36,10 +40,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       _properties.fold(0, (s, p) => s + (p['unit_count'] as int? ?? 0));
   int get _totalResidents =>
       _properties.fold(0, (s, p) => s + (p['resident_count'] as int? ?? 0));
-  int get _totalInvitesIssued =>
-      _properties.fold(0, (s, p) => s + (p['invite_count'] as int? ?? 0));
-  int get _totalInvitesUsed =>
-      _properties.fold(0, (s, p) => s + (p['claimed_count'] as int? ?? 0));
 
   @override
   void didChangeDependencies() {
@@ -90,8 +90,21 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       _error = null;
     });
     final client = Supabase.instance.client;
+    final uid = client.auth.currentUser?.id;
 
     try {
+      // Load profile name
+      if (uid != null) {
+        try {
+          final profile = await client
+              .from('users')
+              .select('first_name')
+              .eq('id', uid)
+              .maybeSingle();
+          if (profile != null) _firstName = profile['first_name']?.toString();
+        } catch (_) {}
+      }
+
       final propsRows = await client
           .from('properties')
           .select(
@@ -144,7 +157,37 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       properties.sort(
           (a, b) => (a['name'] as String).compareTo(b['name'] as String));
 
-      setState(() => _properties = properties);
+      // Load completed comebacks across all properties
+      int completedCb = 0;
+      double avgRating = 0;
+      if (rows.isNotEmpty) {
+        final allPropIds = rows.map((r) => r['id']?.toString() ?? '').toList();
+        try {
+          final cbRows = await client
+              .from('missed_pickup_requests')
+              .select('id')
+              .eq('status', 'completed');
+          completedCb = (cbRows as List).length;
+        } catch (_) {}
+        try {
+          final ratings = await client
+              .from('satisfaction_ratings')
+              .select('rating')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})');
+          final ratingList = (ratings as List);
+          if (ratingList.isNotEmpty) {
+            final sum = ratingList.fold<double>(
+                0, (acc, r) => acc + (r['rating'] as int? ?? 0).toDouble());
+            avgRating = sum / ratingList.length;
+          }
+        } catch (_) {}
+      }
+
+      setState(() {
+        _properties = properties;
+        _completedComebacks = completedCb;
+        _avgSatisfaction = avgRating;
+      });
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -264,46 +307,140 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     final activationRate = _totalUnits > 0
         ? '${(_totalResidents / _totalUnits * 100).toStringAsFixed(1)}%'
         : '—';
+    final earnedFromComebacks = '\$${(_completedComebacks * 15).toStringAsFixed(0)}';
+    final satisfactionDisplay = _avgSatisfaction > 0
+        ? _avgSatisfaction.toStringAsFixed(1)
+        : '--';
+
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppColors.owner,
       backgroundColor: _c.surface1,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: [
-          RoleHeroCard(
-            accent: AppColors.owner,
-            eyebrow: 'PORTFOLIO',
-            title:
-                '$_totalProperties Propert${_totalProperties == 1 ? 'y' : 'ies'}',
-            subtitle:
-                '$_totalResidents residents · $_totalUnits units · $activationRate activation',
-            badgeLabel: 'Owner',
-            showDot: false,
+          // Greeting
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Portfolio',
+                      style: GoogleFonts.inter(
+                          fontSize: 13, color: AppColors.textSecondary)),
+                  Text(
+                    _firstName ?? 'Owner',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary),
+                  ),
+                ],
+              ),
+              GlowBadge(label: 'Owner', accent: AppColors.rlvBlue, showDot: false),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Bento 2×2 grid
+          Row(
+            children: [
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Communities',
+                    value: '$_totalProperties',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Total Units',
+                    value: '$_totalUnits',
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              StatTile(value: '$_totalProperties', label: 'Properties'),
-              const SizedBox(width: 8),
-              StatTile(value: '$_totalUnits', label: 'Units'),
-              const SizedBox(width: 8),
-              StatTile(value: '$_totalResidents', label: 'Residents'),
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Earned (CB)',
+                    value: earnedFromComebacks,
+                    valueColor: AppColors.success,
+                    subtitle: '$_completedComebacks comebacks',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Satisfaction',
+                    value: satisfactionDisplay,
+                    valueColor: _avgSatisfaction >= 4
+                        ? AppColors.success
+                        : _avgSatisfaction >= 3
+                            ? AppColors.warning
+                            : _avgSatisfaction > 0
+                                ? AppColors.error
+                                : AppColors.textPrimary,
+                    subtitle: _avgSatisfaction > 0 ? '/ 5.0' : 'No ratings yet',
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              StatTile(value: '$_totalInvitesIssued', label: 'Codes Issued'),
-              const SizedBox(width: 8),
-              StatTile(
-                value: '$_totalInvitesUsed',
-                label: 'Codes Used',
-                valueColor: AppColors.success,
-              ),
-              const SizedBox(width: 8),
-              StatTile(value: activationRate, label: 'Activation'),
-            ],
+          const SizedBox(height: 12),
+          // Activation bento
+          BentoCard(
+            height: 80,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('ACTIVATION RATE',
+                        style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            color: AppColors.textSecondary)),
+                    const SizedBox(height: 4),
+                    Text(activationRate,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            height: 1.0)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('$_totalResidents residents',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                    Text('$_totalUnits units',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ],
+            ),
           ),
           if (_properties.isNotEmpty) ...[
             const SizedBox(height: 20),
@@ -317,10 +454,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               const SizedBox(height: 4),
               Center(
                 child: TextButton(
-                  onPressed: () => setState(() => _tabIndex = 1),
+                  onPressed: () => setState(() => _tabIndex = 2),
                   child: Text(
                     'View all ${_properties.length} properties →',
-                    style: TextStyle(color: AppColors.owner),
+                    style: const TextStyle(color: AppColors.rlvBlue),
                   ),
                 ),
               ),
@@ -457,7 +594,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 itemCount: _properties.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (context, i) =>
                     _buildFullPropertyCard(_properties[i]),
               ),

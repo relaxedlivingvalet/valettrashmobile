@@ -1,14 +1,15 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/bento_card.dart';
+import '../../../core/widgets/metric_tile.dart';
 import '../../auth/screens/change_password_screen.dart';
 import '../../../core/widgets/glow_badge.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
-import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
-import '../../../core/widgets/stat_tile.dart';
 import 'pm_compliance_report_screen.dart';
 import 'simple_notification_sender_screen.dart';
 
@@ -30,6 +31,10 @@ class _PropertyManagerDashboardNewScreenState
 
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _inviteCodes = [];
+  List<Map<String, dynamic>> _recentRuns = [];
+  String? _firstName;
+  double _avgSatisfaction = 0;
+  double _serviceCompliance = 0; // 0.0 – 1.0
 
   AppColorsScheme _c = AppColorsScheme.dark;
 
@@ -37,9 +42,6 @@ class _PropertyManagerDashboardNewScreenState
       _properties.fold(0, (s, p) => s + (p['unit_count'] as int? ?? 0));
   int get _totalResidents =>
       _properties.fold(0, (s, p) => s + (p['resident_count'] as int? ?? 0));
-  int get _totalViolations =>
-      _properties.fold(0, (s, p) => s + (p['violation_count'] as int? ?? 0));
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -130,6 +132,16 @@ class _PropertyManagerDashboardNewScreenState
     }
 
     try {
+      // Profile name
+      try {
+        final profile = await client
+            .from('users')
+            .select('first_name')
+            .eq('id', uid)
+            .maybeSingle();
+        if (profile != null) _firstName = profile['first_name']?.toString();
+      } catch (_) {}
+
       final userPropsRows = await client
           .from('user_properties')
           .select(
@@ -202,9 +214,47 @@ class _PropertyManagerDashboardNewScreenState
         }
       }
 
+      // Load recent runs, satisfaction, compliance for assigned properties
+      List<Map<String, dynamic>> recentRuns = [];
+      double avgSatisfaction = 0;
+      double serviceCompliance = 0;
+      final allPropIds = properties.map((p) => p['id'] as String).toList();
+      if (allPropIds.isNotEmpty) {
+        try {
+          final runs = await client
+              .from('nightly_runs')
+              .select('id, run_date, status, completed_units, total_units, properties(name)')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})')
+              .order('run_date', ascending: false)
+              .limit(5);
+          recentRuns = List<Map<String, dynamic>>.from(runs as List);
+
+          // Compliance: % of completed runs out of total recent runs
+          if (recentRuns.isNotEmpty) {
+            final completed = recentRuns.where((r) => r['status'] == 'completed').length;
+            serviceCompliance = completed / recentRuns.length;
+          }
+        } catch (_) {}
+        try {
+          final ratings = await client
+              .from('satisfaction_ratings')
+              .select('rating')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})');
+          final ratingList = (ratings as List);
+          if (ratingList.isNotEmpty) {
+            final sum = ratingList.fold<double>(
+                0, (acc, r) => acc + (r['rating'] as int? ?? 0).toDouble());
+            avgSatisfaction = sum / ratingList.length;
+          }
+        } catch (_) {}
+      }
+
       setState(() {
         _properties = properties;
         _inviteCodes = allInviteCodes;
+        _recentRuns = recentRuns;
+        _avgSatisfaction = avgSatisfaction;
+        _serviceCompliance = serviceCompliance;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -336,35 +386,196 @@ class _PropertyManagerDashboardNewScreenState
         ),
       );
     }
+    final compliancePct = (_serviceCompliance * 100).toStringAsFixed(0);
+    final satisfactionDisplay =
+        _avgSatisfaction > 0 ? _avgSatisfaction.toStringAsFixed(1) : '--';
+
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppColors.manager,
       backgroundColor: _c.surface1,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: [
-          RoleHeroCard(
-            accent: AppColors.manager,
-            eyebrow: 'PORTFOLIO',
-            title: '${_properties.length} Propert${_properties.length == 1 ? 'y' : 'ies'}',
-            subtitle: '$_totalResidents residents · $_totalUnits units',
-            badgeLabel: 'Property Manager',
-            showDot: false,
+          // Greeting
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Dashboard',
+                      style: GoogleFonts.inter(
+                          fontSize: 13, color: AppColors.textSecondary)),
+                  Text(
+                    _firstName ?? 'Property Manager',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary),
+                  ),
+                ],
+              ),
+              GlowBadge(
+                  label: 'PM',
+                  accent: AppColors.rlvBlue,
+                  showDot: false),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // 2×2 bento grid
+          Row(
+            children: [
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Total Units',
+                    value: '$_totalUnits',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Residents',
+                    value: '$_totalResidents',
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              StatTile(value: '$_totalUnits', label: 'Units'),
-              const SizedBox(width: 8),
-              StatTile(value: '$_totalResidents', label: 'Residents'),
-              const SizedBox(width: 8),
-              StatTile(
-                value: '$_totalViolations',
-                label: 'Violations',
-                valueColor: _totalViolations > 0 ? AppColors.error : null,
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Compliance',
+                    value: '$compliancePct%',
+                    valueColor: _serviceCompliance >= 0.9
+                        ? AppColors.success
+                        : _serviceCompliance >= 0.7
+                            ? AppColors.warning
+                            : AppColors.error,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 100,
+                  child: MetricTile(
+                    label: 'Satisfaction',
+                    value: satisfactionDisplay,
+                    valueColor: _avgSatisfaction >= 4
+                        ? AppColors.success
+                        : _avgSatisfaction >= 3
+                            ? AppColors.warning
+                            : _avgSatisfaction > 0
+                                ? AppColors.error
+                                : AppColors.textPrimary,
+                    subtitle: _avgSatisfaction > 0 ? '/ 5.0' : 'No ratings',
+                  ),
+                ),
               ),
             ],
           ),
+          const SizedBox(height: 20),
+          // Send Announcement button
+          SizedBox(
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: _showAnnouncementSheet,
+              icon: const Icon(Icons.campaign_outlined),
+              label: Text(
+                'Send Community Announcement',
+                style: GoogleFonts.montserrat(
+                    fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.rlvBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+            ),
+          ),
+          // Recent runs
+          if (_recentRuns.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Text(
+              'RECENT RUNS',
+              style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                  color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            ..._recentRuns.take(5).map((run) {
+              final status = run['status'] as String? ?? 'unknown';
+              final propData = run['properties'];
+              final propName = propData is Map
+                  ? propData['name']?.toString() ?? 'Property'
+                  : 'Property';
+              final runDate = (run['run_date'] as String? ?? '').substring(0, 10);
+              final completed = run['completed_units'] as int? ?? 0;
+              final total = run['total_units'] as int? ?? 0;
+              final statusColor = status == 'completed'
+                  ? AppColors.success
+                  : status == 'in_progress'
+                      ? AppColors.rlvBlue
+                      : AppColors.textSecondary;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.surface1,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(propName,
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary)),
+                          Text(runDate,
+                              style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    if (total > 0)
+                      Text('$completed/$total',
+                          style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.textSecondary)),
+                    const SizedBox(width: 8),
+                    GlowBadge(
+                        label: status == 'completed'
+                            ? 'Done'
+                            : status == 'in_progress'
+                                ? 'Active'
+                                : 'Scheduled',
+                        accent: statusColor,
+                        showDot: status == 'in_progress'),
+                  ],
+                ),
+              );
+            }),
+          ],
           const SizedBox(height: 20),
           ..._properties.map((p) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -373,6 +584,186 @@ class _PropertyManagerDashboardNewScreenState
         ],
       ),
     );
+  }
+
+  Future<void> _showAnnouncementSheet() async {
+    final titleCtrl = TextEditingController();
+    final bodyCtrl = TextEditingController();
+    String? selectedPropertyId =
+        _properties.isNotEmpty ? _properties.first['id'] as String? : null;
+    bool sending = false;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface1,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 28,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text('Send Announcement',
+                  style: GoogleFonts.montserrat(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 4),
+              Text('Residents will see this in their Community Updates feed',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 16),
+              if (_properties.length > 1) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: selectedPropertyId,
+                  dropdownColor: AppColors.surface2,
+                  style: GoogleFonts.inter(
+                      color: AppColors.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Property',
+                    labelStyle: GoogleFonts.inter(
+                        color: AppColors.textSecondary, fontSize: 13),
+                    filled: true,
+                    fillColor: AppColors.surface2,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                  ),
+                  items: _properties
+                      .map((p) => DropdownMenuItem<String>(
+                            value: p['id'] as String?,
+                            child: Text(p['name']?.toString() ?? ''),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setModal(() => selectedPropertyId = v),
+                ),
+                const SizedBox(height: 12),
+              ],
+              TextField(
+                controller: titleCtrl,
+                style: GoogleFonts.inter(
+                    color: AppColors.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Title',
+                  labelStyle: GoogleFonts.inter(
+                      color: AppColors.textSecondary, fontSize: 13),
+                  filled: true,
+                  fillColor: AppColors.surface2,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: bodyCtrl,
+                maxLines: 4,
+                style: GoogleFonts.inter(
+                    color: AppColors.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Message',
+                  labelStyle: GoogleFonts.inter(
+                      color: AppColors.textSecondary, fontSize: 13),
+                  filled: true,
+                  fillColor: AppColors.surface2,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: sending
+                      ? null
+                      : () async {
+                          final title = titleCtrl.text.trim();
+                          final body = bodyCtrl.text.trim();
+                          if (title.isEmpty || body.isEmpty) return;
+                          setModal(() => sending = true);
+                          try {
+                            final uid = Supabase.instance.client.auth
+                                .currentUser?.id;
+                            await Supabase.instance.client
+                                .from('community_announcements')
+                                .insert({
+                              'property_id': selectedPropertyId,
+                              'title': title,
+                              'body': body,
+                              'sent_by': uid,
+                            });
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            _snack('Announcement sent!');
+                          } catch (e) {
+                            setModal(() => sending = false);
+                            _snack('Failed to send: $e');
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.rlvBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: sending
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation(Colors.white)),
+                        )
+                      : Text('Send Announcement',
+                          style: GoogleFonts.montserrat(
+                              fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    titleCtrl.dispose();
+    bodyCtrl.dispose();
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: AppColors.surface1,
+      content: Text(msg, style: const TextStyle(color: AppColors.textPrimary)),
+    ));
   }
 
   Widget _buildPropertyCard(Map<String, dynamic> p) {
@@ -588,7 +979,7 @@ class _PropertyManagerDashboardNewScreenState
                 padding:
                     const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 itemCount: _inviteCodes.length,
-                separatorBuilder: (_, __) =>
+                separatorBuilder: (context, index) =>
                     const SizedBox(height: 10),
                 itemBuilder: (context, i) =>
                     _buildCodeCard(_inviteCodes[i]),
@@ -677,14 +1068,29 @@ class _PropertyManagerDashboardNewScreenState
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
-              RoleHeroCard(
-                accent: AppColors.manager,
-                eyebrow: 'MAINTENANCE',
-                title: 'Work Orders',
-                subtitle:
-                    'Manage service requests and comeback items across properties',
-                badgeLabel: 'Property Manager',
-                showDot: false,
+              BentoCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('MAINTENANCE',
+                        style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            color: AppColors.textSecondary)),
+                    const SizedBox(height: 6),
+                    Text('Work Orders',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary)),
+                    const SizedBox(height: 4),
+                    Text('Manage service requests and comeback items',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
               PrimaryButton(

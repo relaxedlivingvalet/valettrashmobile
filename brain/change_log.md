@@ -5,6 +5,43 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-17 — Lint cleanup: warnings + async context bugs
+
+- **Files Modified**:
+  - `admin_dashboard_screen.dart` — removed 4 unused imports (`dart:math`, `role_theme.dart`, `glow_badge.dart`, `primary_button.dart`); fixed 4× `use_build_context_synchronously` with `if (!mounted) return;` guards
+  - `resident_extra_services_screen.dart` — removed unused `supabase_flutter` import
+  - `resident_service_calendar_screen.dart` — removed unused `supabase_flutter` import + dead `lastDayOfMonth` variable
+  - `resident_services_screen.dart` — removed unused `supabase_flutter` import
+  - `property_manager_dashboard_screen.dart` — removed unused `_email` field + dead `initState` assignment block
+  - `manager_property_services_screen.dart` — removed unused `supabase_flutter` import
+
+- **Result**: `flutter analyze lib/` — 0 errors, 0 actionable warnings. Only 2 remaining warnings are `signInWithIdToken is experimental` in `simple_auth_screen.dart` (Supabase-controlled API, not fixable on our end)
+
+---
+
+### 2026-05-17 — Session 12: Full dashboard rebuild (RLV brand sheet + Supabase integration)
+
+- **Goal**: Complete rebuild of all 5 role dashboards to match brand mockups. No Stripe.
+
+- **Files Created**:
+  - `mobile/lib/core/widgets/bento_card.dart` — shared dark card (surface1 bg, 16px radius, border)
+  - `mobile/lib/core/widgets/metric_tile.dart` — label (9px Inter caps) + value (28px Montserrat w800) + optional subtitle
+
+- **Files Rebuilt** (all zero errors/warnings in `flutter analyze`):
+  - `mobile/lib/features/worker/screens/worker_dashboard_screen.dart` — Amazon Flex-style Scan tab (photo confirm OR manual mark done, flag comeback, auto-advance), fl_chart donut for stop progress, realtime direct messaging, clock in/out
+  - `mobile/lib/features/manager/screens/manager_dashboard_screen.dart` — BentoCard 2×2 metrics, fl_chart 7-day LineChart for completion trend
+  - `mobile/lib/features/owner/screens/owner_dashboard_screen.dart` — BentoCard metrics including "Earned from Comebacks" (completedComebacks × $15)
+  - `mobile/lib/features/manager/screens/property_manager_dashboard_new.dart` — community health bento grid, Send Announcement bottom sheet → community_announcements table
+  - `mobile/lib/features/resident/screens/resident_dashboard_screen.dart` — fixed subscribe() void result, isFilter → .filter(), removed unused import
+
+- **Critical v1 patterns applied everywhere**:
+  - `subscribe()` returns void — must separate from channel chain: `_channel = ...on(...); _channel?.subscribe();`
+  - `.isFilter()` is v2-only — use `.filter('col', 'is', 'null')`
+
+- **Verified**: `flutter analyze lib/` — 0 errors, 0 warnings in all 5 dashboard files; `flutter test` — All tests passed
+
+---
+
 ### 2026-05-17 — Final app icon
 
 - **Files Modified**:

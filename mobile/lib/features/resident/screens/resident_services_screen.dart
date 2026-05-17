@@ -1,5 +1,4 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ResidentServicesScreen extends StatefulWidget {
   const ResidentServicesScreen({super.key});
