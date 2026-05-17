@@ -27,6 +27,7 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -54,8 +55,10 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
       String msg = e.toString();
       if (msg.contains('Invalid login credentials')) msg = 'Invalid email or password';
       else if (msg.contains('Email not confirmed')) msg = 'Please confirm your email before signing in.';
+      if (!mounted) return;
       setState(() => _error = msg);
     } finally {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -66,11 +69,9 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
       _error = null;
     });
     try {
-      final googleSignIn = GoogleSignIn(
-        scopes: ['email', 'profile'],
-      );
-      final googleUser = await googleSignIn.signIn();
+      final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
+        if (!mounted) return;
         setState(() => _isLoading = false);
         return;
       }
@@ -84,8 +85,10 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
         accessToken: accessToken,
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = 'Google sign-in failed. Configure Google OAuth in Supabase to enable.');
     } finally {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -110,8 +113,10 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
         nonce: credential.authorizationCode,
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = 'Apple sign-in requires an Apple Developer account to be configured.');
     } finally {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
