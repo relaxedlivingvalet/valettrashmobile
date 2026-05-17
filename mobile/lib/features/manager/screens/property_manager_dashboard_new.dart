@@ -262,26 +262,10 @@ class _PropertyManagerDashboardNewScreenState
               onTap: (i) => setState(() => _tabIndex = i),
               accent: AppColors.manager,
               items: const [
-                RoleNavItem(
-                  icon: Icons.apartment_outlined,
-                  activeIcon: Icons.apartment,
-                  label: 'Portfolio',
-                ),
-                RoleNavItem(
-                  icon: Icons.people_outline,
-                  activeIcon: Icons.people,
-                  label: 'Residents',
-                ),
-                RoleNavItem(
-                  icon: Icons.notifications_outlined,
-                  activeIcon: Icons.notifications,
-                  label: 'Notify',
-                ),
-                RoleNavItem(
-                  icon: Icons.settings_outlined,
-                  activeIcon: Icons.settings,
-                  label: 'Settings',
-                ),
+                RoleNavItem(icon: Icons.grid_view_outlined, activeIcon: Icons.grid_view, label: 'Dashboard'),
+                RoleNavItem(icon: Icons.apartment_outlined, activeIcon: Icons.apartment, label: 'Properties'),
+                RoleNavItem(icon: Icons.inbox_outlined, activeIcon: Icons.inbox, label: 'Requests'),
+                RoleNavItem(icon: Icons.more_horiz, activeIcon: Icons.more_horiz, label: 'More'),
               ],
             ),
           ],
@@ -293,19 +277,19 @@ class _PropertyManagerDashboardNewScreenState
   Widget _buildTab() {
     switch (_tabIndex) {
       case 0:
-        return _buildPortfolioTab();
+        return _buildDashboardTab();
       case 1:
-        return _buildResidentsTab();
+        return _buildPropertiesTab();
       case 2:
-        return _buildNotifyTab();
+        return _buildRequestsTab();
       default:
-        return _buildSettingsTab();
+        return _buildMoreTab();
     }
   }
 
-  // ── Portfolio tab ─────────────────────────────────────────────────────────────
+  // ── Dashboard tab ─────────────────────────────────────────────────────────────
 
-  Widget _buildPortfolioTab() {
+  Widget _buildDashboardTab() {
     if (_loading) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
@@ -538,9 +522,9 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  // ── Residents tab ─────────────────────────────────────────────────────────────
+  // ── Properties tab ───────────────────────────────────────────────────────────
 
-  Widget _buildResidentsTab() {
+  Widget _buildPropertiesTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -550,7 +534,7 @@ class _PropertyManagerDashboardNewScreenState
             children: [
               Expanded(
                 child: Text(
-                  'Residents & Codes',
+                  'Property Services',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -560,7 +544,7 @@ class _PropertyManagerDashboardNewScreenState
                 ),
               ),
               GlowBadge(
-                label: '$_claimedCodes / ${_inviteCodes.length} claimed',
+                label: '${_properties.length} properties',
                 accent: AppColors.manager,
                 showDot: false,
               ),
@@ -675,16 +659,16 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  // ── Notify tab ───────────────────────────────────────────────────────────────
+  // ── Requests tab ─────────────────────────────────────────────────────────────
 
-  Widget _buildNotifyTab() {
+  Widget _buildRequestsTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Text(
-            'Send Notifications',
+            'Open Requests',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -699,10 +683,10 @@ class _PropertyManagerDashboardNewScreenState
             children: [
               RoleHeroCard(
                 accent: AppColors.manager,
-                eyebrow: 'COMMUNICATION',
-                title: 'Resident Alerts',
+                eyebrow: 'MAINTENANCE',
+                title: 'Work Orders',
                 subtitle:
-                    'Send property-wide or individual notifications to residents',
+                    'Manage service requests and comeback items across properties',
                 badgeLabel: 'Property Manager',
                 showDot: false,
               ),
@@ -747,9 +731,9 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  // ── Settings tab ──────────────────────────────────────────────────────────────
+  // ── More tab ───────────────────────────────────────────────────────────────
 
-  Widget _buildSettingsTab() {
+  Widget _buildMoreTab() {
     final initial = _email.isNotEmpty ? _email[0].toUpperCase() : 'M';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -757,7 +741,7 @@ class _PropertyManagerDashboardNewScreenState
         Padding(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Text(
-            'Settings',
+            'More',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
