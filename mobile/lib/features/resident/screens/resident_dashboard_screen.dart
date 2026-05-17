@@ -1,20 +1,16 @@
 ﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/glow_badge.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
-import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
-import '../../../core/widgets/stat_tile.dart';
 import '../../auth/screens/change_password_screen.dart';
-import 'resident_comeback_request_screen.dart';
-import 'resident_concerns_screen.dart';
 import 'resident_vacation_hold_screen.dart';
-import 'resident_violations_screen.dart';
 
 class ResidentDashboardScreen extends StatefulWidget {
   const ResidentDashboardScreen({super.key});
@@ -44,11 +40,10 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   bool _notifLoading = false;
   bool _notifLoaded = false;
 
-  // Pickup status banner
+  // Pickup status
   String? _runStatus; // 'pending', 'in_progress', 'completed'
   String? _propertyId;
   Timer? _statusTimer;
-  bool _bannerDismissed = false;
 
   @override
   void initState() {
@@ -84,7 +79,6 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       if (newStatus != null && newStatus != _runStatus) {
         if (mounted) setState(() {
           _runStatus = newStatus;
-          _bannerDismissed = false;
         });
       }
     } catch (_) {}
@@ -296,14 +290,14 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
                   label: 'Home',
                 ),
                 RoleNavItem(
-                  icon: Icons.history_outlined,
-                  activeIcon: Icons.history,
-                  label: 'History',
+                  icon: Icons.delete_outline,
+                  activeIcon: Icons.delete,
+                  label: 'Services',
                 ),
                 RoleNavItem(
-                  icon: Icons.notifications_outlined,
-                  activeIcon: Icons.notifications,
-                  label: 'Alerts',
+                  icon: Icons.chat_bubble_outline,
+                  activeIcon: Icons.chat_bubble,
+                  label: 'Messages',
                 ),
                 RoleNavItem(
                   icon: Icons.person_outline,
@@ -323,9 +317,9 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       case 0:
         return _buildHomeTab();
       case 1:
-        return _buildHistoryTab();
+        return _buildServicesTab();
       case 2:
-        return _buildAlertsTab();
+        return _buildMessagesTab();
       default:
         return _buildProfileTab();
     }
@@ -339,20 +333,18 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: const [
           SkeletonCard(height: 52),
-          SizedBox(height: 20),
-          SkeletonCard(height: 128),
+          SizedBox(height: 16),
+          SkeletonCard(height: 88),
           SizedBox(height: 12),
-          SkeletonCard(height: 60),
-          SizedBox(height: 16),
+          SkeletonCard(height: 88),
+          SizedBox(height: 12),
           SkeletonCard(height: 110),
-          SizedBox(height: 16),
-          SkeletonCard(height: 70),
         ],
       );
     }
     return RefreshIndicator(
       onRefresh: _load,
-      color: AppColors.resident,
+      color: AppColors.rlvBlue,
       backgroundColor: AppColors.surface1,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
@@ -366,125 +358,95 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
                 showDot: false,
               ),
             ),
-          if (!_bannerDismissed && _runStatus != null &&
-              _runStatus != 'pending')
-            _buildPickupStatusBanner(),
-          _buildGreeting(),
+          _buildDashboardHeader(),
           const SizedBox(height: 20),
-          RoleHeroCard(
-            accent: AppColors.resident,
-            eyebrow: "TONIGHT'S SERVICE",
-            title: _propertyName.isEmpty
-                ? 'No Property Assigned'
-                : _propertyName,
-            subtitle: 'Window: $_windowShort',
-            badgeLabel: _countdownLabel,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              StatTile(value: '$_freeRemain', label: 'Comebacks Left'),
-              const SizedBox(width: 8),
-              StatTile(
-                value: '$_violationsCount',
-                label: 'Violations',
-                valueColor:
-                    _violationsCount > 0 ? AppColors.error : null,
-              ),
-            ],
-          ),
+          _buildSectionLabel('Upcoming Service'),
+          const SizedBox(height: 8),
+          _buildUpcomingServiceCard(),
           const SizedBox(height: 16),
-          _buildQuickActionsCard(),
-          if (_notifications.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _buildNotifPreview(_notifications.first),
-          ],
+          _buildSectionLabel('Service Status'),
+          const SizedBox(height: 8),
+          _buildServiceStatusCard(),
+          const SizedBox(height: 16),
+          _buildSectionLabel('Service Updates'),
+          const SizedBox(height: 8),
+          _buildServiceUpdatesCard(),
         ],
       ),
     );
   }
 
-  Widget _buildPickupStatusBanner() {
-    final isInProgress = _runStatus == 'in_progress';
-    final color = isInProgress ? AppColors.warning : AppColors.success;
-    final icon = isInProgress ? Icons.local_shipping_outlined : Icons.check_circle_outline;
-    final message = isInProgress
-        ? 'Your porter is collecting now'
-        : 'Pickup complete for tonight';
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            GestureDetector(
-              onTap: () => setState(() => _bannerDismissed = true),
-              child: const Icon(Icons.close,
-                  color: AppColors.textMuted, size: 16),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGreeting() {
-    final initial =
-        _residentName.isNotEmpty ? _residentName[0].toUpperCase() : 'R';
+  Widget _buildDashboardHeader() {
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'Good morning,'
+        : hour < 17
+            ? 'Good afternoon,'
+            : 'Good evening,';
     return Row(
       children: [
-        CircleAvatar(
-          radius: 20,
-          backgroundColor: AppColors.resident.withValues(alpha: 0.15),
-          child: Text(
-            initial,
-            style: TextStyle(
-              color: AppColors.resident,
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Good evening,',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textMuted,
-                  letterSpacing: 0.5,
-                ),
-              ),
               Text(
-                _residentName,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -0.3,
+                greeting,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
                 ),
               ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      _propertyName.isEmpty ? 'Your Property' : _propertyName,
+                      style: GoogleFonts.montserrat(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.3,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_propertyName.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: () => _onTabChange(2),
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(
+                Icons.notifications_outlined,
+                color: AppColors.textPrimary,
+                size: 24,
+              ),
+              if (_notifications.isNotEmpty)
+                Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: AppColors.rlvBlue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -492,122 +454,22 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     );
   }
 
-  Widget _buildQuickActionsCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          _actionRow(
-            icon: Icons.replay_outlined,
-            iconColor: AppColors.resident,
-            title: 'Request a Comeback',
-            subtitle: _freeRemain > 0
-                ? '$_freeRemain free remaining this month'
-                : 'Additional comebacks — \$${_comebackFee.toStringAsFixed(0)}',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ResidentComebackRequestScreen(
-                  freeRemain: _freeRemain,
-                  comebackFee: _comebackFee,
-                ),
-              ),
-            ),
-          ),
-          Divider(height: 1, color: AppColors.border),
-          _actionRow(
-            icon: Icons.help_outline,
-            iconColor: AppColors.info,
-            title: 'Questions & Concerns',
-            subtitle: 'Submit a question or feedback',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const ResidentConcernsScreen(),
-              ),
-            ),
-          ),
-          Divider(height: 1, color: AppColors.border),
-          _actionRow(
-            icon: Icons.history_outlined,
-            iconColor: AppColors.textSecondary,
-            title: 'Service History',
-            subtitle: 'View past pickups',
-            onTap: () => _onTabChange(1),
-          ),
-          Divider(height: 1, color: AppColors.border),
-          _actionRow(
-            icon: Icons.warning_amber_outlined,
-            iconColor:
-                _violationsCount > 0 ? AppColors.error : AppColors.textMuted,
-            title: 'Violations',
-            subtitle: _violationsCount == 0
-                ? 'None on record'
-                : '$_violationsCount on record',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => const ResidentViolationsScreen()),
-            ),
-          ),
-        ],
+  Widget _buildSectionLabel(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.montserrat(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textSecondary,
+        letterSpacing: 0.3,
       ),
     );
   }
 
-  Widget _actionRow({
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: iconColor),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNotifPreview(Map<String, dynamic> n) {
+  Widget _buildUpcomingServiceCard() {
+    final isOnSchedule = _runStatus == null || _runStatus == 'pending';
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface1,
         borderRadius: BorderRadius.circular(12),
@@ -616,50 +478,65 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color: AppColors.info.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.rlvBlue.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child:
-                const Icon(Icons.notifications_outlined, size: 18, color: AppColors.info),
+            child: const Icon(
+              Icons.delete_outline,
+              color: AppColors.rlvBlue,
+              size: 20,
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  n['title']?.toString() ?? 'Notification',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                  'Tonight',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  n['message']?.toString() ?? '',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.textSecondary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  _windowShort == '--'
+                      ? 'No window configured'
+                      : _windowShort,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => _onTabChange(2),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: (isOnSchedule ? AppColors.success : AppColors.warning)
+                  .withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: (isOnSchedule
+                        ? AppColors.success
+                        : AppColors.warning)
+                    .withValues(alpha: 0.3),
+              ),
+            ),
             child: Text(
-              'See all',
-              style: TextStyle(
+              isOnSchedule ? 'On Schedule' : 'In Progress',
+              style: GoogleFonts.inter(
                 fontSize: 11,
-                color: AppColors.resident,
                 fontWeight: FontWeight.w600,
+                color:
+                    isOnSchedule ? AppColors.success : AppColors.warning,
               ),
             ),
           ),
@@ -668,13 +545,188 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     );
   }
 
-  // ── History ──────────────────────────────────────────────────────────────────
+  Widget _buildServiceStatusCard() {
+    final isCompleted = _runStatus == 'completed';
+    final isInProgress = _runStatus == 'in_progress';
+    final color = isCompleted
+        ? AppColors.success
+        : isInProgress
+            ? AppColors.warning
+            : AppColors.success;
+    final icon = isCompleted
+        ? Icons.check_circle_outline
+        : isInProgress
+            ? Icons.local_shipping_outlined
+            : Icons.check_circle_outline;
+    final statusText = isCompleted
+        ? 'Pickup Complete'
+        : isInProgress
+            ? 'Porter En Route'
+            : 'All Clear';
+    final subText = isCompleted
+        ? 'Collected tonight'
+        : isInProgress
+            ? 'Your porter is collecting now'
+            : 'No missed collections';
 
-  Widget _buildHistoryTab() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  statusText,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subText,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.check_circle, color: color, size: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceUpdatesCard() {
+    if (_notifications.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface1,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          'No updates at this time.',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      );
+    }
+    final items = _notifications.take(3).toList();
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: List.generate(items.length, (i) {
+          final n = items[i];
+          final isLast = i == items.length - 1;
+          return Column(
+            children: [
+              InkWell(
+                onTap: () => _onTabChange(2),
+                borderRadius: i == 0
+                    ? const BorderRadius.vertical(top: Radius.circular(12))
+                    : isLast
+                        ? const BorderRadius.vertical(
+                            bottom: Radius.circular(12))
+                        : BorderRadius.zero,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              n['message']?.toString() ??
+                                  n['title']?.toString() ??
+                                  '',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: AppColors.textPrimary,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (n['created_at'] != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                _formatNotifDate(
+                                    n['created_at'].toString()),
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: AppColors.textSecondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (!isLast) Divider(height: 1, color: AppColors.border),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+
+  String _formatNotifDate(String raw) {
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  // ── Services ─────────────────────────────────────────────────────────────────
+
+  Widget _buildServicesTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeader('Service History'),
+        _sectionHeader('Services'),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -685,13 +737,13 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     );
   }
 
-  // ── Alerts ───────────────────────────────────────────────────────────────────
+  // ── Messages ─────────────────────────────────────────────────────────────────
 
-  Widget _buildAlertsTab() {
+  Widget _buildMessagesTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeader('Notifications'),
+        _sectionHeader('Messages'),
         if (_notifLoading)
           Expanded(
             child: ListView(
