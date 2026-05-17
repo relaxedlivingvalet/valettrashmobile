@@ -58,8 +58,7 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
       if (!mounted) return;
       setState(() => _error = msg);
     } finally {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -88,8 +87,7 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
       if (!mounted) return;
       setState(() => _error = 'Google sign-in failed. Configure Google OAuth in Supabase to enable.');
     } finally {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -116,8 +114,7 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
       if (!mounted) return;
       setState(() => _error = 'Apple sign-in requires an Apple Developer account to be configured.');
     } finally {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

@@ -163,33 +163,6 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  String _workerName(Map<String, dynamic> row) {
-    final u = row['users'];
-    if (u is! Map) return row['user_id']?.toString() ?? 'Unknown';
-    final fn = u['first_name']?.toString() ?? '';
-    final ln = u['last_name']?.toString() ?? '';
-    if (fn.isNotEmpty || ln.isNotEmpty) return '$fn $ln'.trim();
-    return u['email']?.toString() ?? 'Unknown';
-  }
-
-  Color _runStatusColor(String status) {
-    switch (status) {
-      case 'completed':
-        return Colors.green;
-      case 'in_progress':
-        return Colors.blue;
-      case 'cancelled':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
   String _runStatusLabel(String status) {
     switch (status) {
       case 'completed':
@@ -218,108 +191,6 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     final min = dt.minute.toString().padLeft(2, '0');
     final ap = dt.hour >= 12 ? 'PM' : 'AM';
     return '$h12:$min $ap';
-  }
-
-  Widget _sectionCard({
-    required String title,
-    required IconData icon,
-    required Color iconColor,
-    required Widget child,
-  }) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 24),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _rowTile(Widget leading, String primary, [String? secondary]) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          leading,
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(primary,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 14)),
-                if (secondary != null) ...[
-                  const SizedBox(height: 2),
-                  Text(secondary,
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade600)),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _emptyRow(String label) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Text(label,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
-    );
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
@@ -649,64 +520,6 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildWorkerCard(Map<String, dynamic> row) {
-    final name = _workerName(row);
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'W';
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: AppColors.worker.withValues(alpha: 0.15),
-            child: Text(
-              initial,
-              style: TextStyle(
-                color: AppColors.worker,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Driver',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          GlowBadge(
-            label: 'Active',
-            accent: AppColors.worker,
-            showDot: true,
-          ),
-        ],
-      ),
     );
   }
 
