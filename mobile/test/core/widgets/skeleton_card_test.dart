@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:mobile/core/widgets/skeleton_card.dart';
+import 'package:valet/core/widgets/skeleton_card.dart';
 
 void main() {
   Widget wrap(Widget child) => MaterialApp(

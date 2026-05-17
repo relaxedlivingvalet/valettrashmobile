@@ -1,8 +1,9 @@
 ﻿import 'dart:typed_data';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
+import '../../../core/platform/geo_helper_stub.dart'
+    // ignore: uri_does_not_exist
+    if (dart.library.html) '../../../core/platform/geo_helper_web.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -355,16 +356,16 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return;
     try {
-      final pos = await html.window.navigator.geolocation
-          .getCurrentPosition()
-          .timeout(const Duration(seconds: 10));
-      final lat = pos.coords!.latitude!.toDouble();
-      final lng = pos.coords!.longitude!.toDouble();
+      final coords = await getPlatformLocation();
+      if (coords == null) {
+        _snack('Location unavailable on this platform');
+        return;
+      }
       await Supabase.instance.client.from('worker_locations').upsert({
         'user_id': uid,
         'property_id': _propertyId,
-        'latitude': lat,
-        'longitude': lng,
+        'latitude': coords['lat'],
+        'longitude': coords['lng'],
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
       _snack('Location shared');

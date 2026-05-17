@@ -1,7 +1,7 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-
 import 'package:flutter/material.dart';
+import '../../../core/platform/csv_download_stub.dart'
+    // ignore: uri_does_not_exist
+    if (dart.library.html) '../../../core/platform/csv_download_web.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -77,15 +77,9 @@ class _PmComplianceReportScreenState extends State<PmComplianceReportScreen> {
           r['completed_at'] != null ? _fmtTs(r['completed_at'] as String) : '';
       buf.writeln('$date,$status,$started,$completed');
     }
-    final content = buf.toString();
-    final blob = html.Blob([content], 'text/csv');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    (html.document.createElement('a') as html.AnchorElement)
-      ..href = url
-      ..download =
-          '${widget.propertyName.replaceAll(' ', '_')}_compliance_${_fmtDate(DateTime.now().toIso8601String())}.csv'
-      ..click();
-    html.Url.revokeObjectUrl(url);
+    final filename =
+        '${widget.propertyName.replaceAll(' ', '_')}_compliance_${_fmtDate(DateTime.now().toIso8601String())}.csv';
+    downloadCsv(buf.toString(), filename);
   }
 
   String _fmtDate(String iso) {

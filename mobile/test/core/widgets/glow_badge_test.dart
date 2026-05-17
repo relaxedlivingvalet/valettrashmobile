@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile/core/theme/app_colors.dart';
-import 'package:mobile/core/widgets/glow_badge.dart';
+import 'package:valet/core/theme/app_colors.dart';
+import 'package:valet/core/widgets/glow_badge.dart';
 
 void main() {
   Widget wrap(Widget child) => MaterialApp(

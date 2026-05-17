@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile/features/auth/screens/simple_auth_screen.dart';
+import 'package:valet/features/auth/screens/simple_auth_screen.dart';
 
 void main() {
   // flutter_animate restarts animations on setState; pump 2s drains all timers.
@@ -9,26 +9,16 @@ void main() {
   Widget wrap() => const MaterialApp(home: SimpleAuthScreen());
 
   group('SimpleAuthScreen', () {
-    testWidgets('renders sign in heading', (tester) async {
+    testWidgets('renders Welcome Back heading', (tester) async {
       await tester.pumpWidget(wrap());
       await tester.pump(settle);
-      expect(find.text('Sign In'), findsWidgets);
+      expect(find.text('Welcome Back'), findsOneWidget);
     });
 
-    testWidgets('renders email and password fields', (tester) async {
+    testWidgets('renders email and password fields only (no sign-up toggle)', (tester) async {
       await tester.pumpWidget(wrap());
       await tester.pump(settle);
       expect(find.byType(TextFormField), findsNWidgets(2));
-    });
-
-    testWidgets('shows first name and last name fields in sign up mode', (tester) async {
-      await tester.pumpWidget(wrap());
-      await tester.pump(settle);
-
-      await tester.tap(find.text("Don't have an account? Sign up"));
-      await tester.pump(settle);
-
-      expect(find.byType(TextFormField), findsNWidgets(4));
     });
 
     testWidgets('renders Sign In button', (tester) async {
@@ -37,17 +27,23 @@ void main() {
       expect(find.text('Sign In'), findsWidgets);
     });
 
-    testWidgets('toggles to sign up mode and back', (tester) async {
+    testWidgets('renders Apple and Google OAuth buttons', (tester) async {
       await tester.pumpWidget(wrap());
       await tester.pump(settle);
+      expect(find.text('Apple'), findsOneWidget);
+      expect(find.text('Google'), findsOneWidget);
+    });
 
-      await tester.tap(find.text("Don't have an account? Sign up"));
+    testWidgets('renders sign up link', (tester) async {
+      await tester.pumpWidget(wrap());
       await tester.pump(settle);
-      expect(find.text('Sign Up'), findsWidgets);
+      expect(find.text('Sign up'), findsOneWidget);
+    });
 
-      await tester.tap(find.text('Already have an account? Sign in'));
+    testWidgets('renders forgot password link', (tester) async {
+      await tester.pumpWidget(wrap());
       await tester.pump(settle);
-      expect(find.text('Sign In'), findsWidgets);
+      expect(find.text('Forgot password?'), findsOneWidget);
     });
   });
 }

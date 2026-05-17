@@ -1,27 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile/core/theme/app_colors.dart';
-import 'package:mobile/core/theme/role_theme.dart';
+import 'package:valet/core/theme/app_colors.dart';
+import 'package:valet/core/theme/role_theme.dart';
 
 void main() {
   group('RoleTheme.accentFor', () {
-    test('resident returns emerald', () {
-      expect(RoleTheme.accentFor(AppRole.resident), AppColors.resident);
-    });
-
-    test('worker returns amber', () {
-      expect(RoleTheme.accentFor(AppRole.worker), AppColors.worker);
-    });
-
-    test('propertyManager returns indigo', () {
-      expect(RoleTheme.accentFor(AppRole.propertyManager), AppColors.manager);
-    });
-
-    test('operationsManager returns indigo (same as PM)', () {
-      expect(RoleTheme.accentFor(AppRole.operationsManager), AppColors.manager);
-    });
-
-    test('owner returns purple', () {
-      expect(RoleTheme.accentFor(AppRole.owner), AppColors.owner);
+    test('all roles return brand blue (unified accent)', () {
+      expect(RoleTheme.accentFor(AppRole.resident), AppColors.rlvBlue);
+      expect(RoleTheme.accentFor(AppRole.worker), AppColors.rlvBlue);
+      expect(RoleTheme.accentFor(AppRole.propertyManager), AppColors.rlvBlue);
+      expect(RoleTheme.accentFor(AppRole.operationsManager), AppColors.rlvBlue);
+      expect(RoleTheme.accentFor(AppRole.owner), AppColors.rlvBlue);
     });
   });
 
