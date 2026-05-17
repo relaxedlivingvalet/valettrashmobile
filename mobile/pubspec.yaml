@@ -16,6 +16,8 @@ dependencies:
   flutter_dotenv: ^5.1.0
   image_picker: ^1.0.10
   supabase_flutter: ^1.10.25
+  sign_in_with_apple: ^5.0.0
+  google_sign_in: ^6.2.2
 
   # Design System
   shadcn_flutter: ^0.0.52
