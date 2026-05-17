@@ -5,6 +5,18 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-17 — Final app icon
+
+- **Files Modified**:
+  - `mobile/assets/icon/app_icon.png`, `app_icon_foreground.png`, `splash_logo.png` — final RLV logo from owner
+  - `mobile/pubspec.yaml` — adaptive icon background `#10B981` → `#000000`
+  - Regenerated Android mipmaps/adaptive icons, iOS AppIcon, and native splash assets via `flutter_launcher_icons` + `flutter_native_splash`
+  - `brain/next_steps.md`, `brain/current_state.md`
+
+- **Reason**: Store submission checklist — replace placeholder icon with production artwork
+
+---
+
 ### 2026-05-16 (Session 11 — Owner handoff prep)
 
 - **Files Modified**:

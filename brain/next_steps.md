@@ -2,11 +2,7 @@
 
 ## Before Submitting to Stores (action required from you)
 
-- [ ] **Final app icon** — replace `assets/icon/app_icon.png` and `app_icon_foreground.png` with final artwork (1024×1024 PNG), then run:
-  ```powershell
-  flutter pub run flutter_launcher_icons
-  flutter pub run flutter_native_splash:create
-  ```
+- [x] **Final app icon** — RLV logo installed at `mobile/assets/icon/`; launcher icons + splash regenerated (May 2026)
 - [ ] **iOS signing** — requires macOS + Xcode + Apple Developer account ($99/yr):
   1. Open `ios/Runner.xcworkspace` in Xcode
   2. Set your Apple team under Signing & Capabilities

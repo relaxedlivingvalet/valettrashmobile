@@ -1,5 +1,9 @@
-# Dev session screenshots and temp files
+# Dev session screenshots and temp files (allow mobile branding / launcher assets)
 *.png
+!mobile/assets/icon/*.png
+!mobile/android/app/src/main/res/**/*.png
+!mobile/ios/Runner/Assets.xcassets/**/*.png
+!mobile/web/**/*.png
 *.jpg
 *.jpeg
 serve.js

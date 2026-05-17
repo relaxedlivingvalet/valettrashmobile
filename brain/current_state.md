@@ -1,7 +1,7 @@
 # Current State
 
 ## Current Objective
-**App Store / Play Store ready.** All features complete. Native Android and iOS platform directories generated and configured. Waiting on final icon artwork and Apple Developer account before actual submission.
+**App Store / Play Store ready.** All features complete. Native Android and iOS platform directories generated and configured. Final RLV app icon installed and platform icons/splash regenerated. Waiting on Apple Developer account before iOS submission.
 
 ## Run the App
 ```powershell
@@ -89,11 +89,10 @@ Generated in session 10. Both platforms use bundle ID `com.relaxedliving.valet`.
 - **iOS builds require macOS + Xcode + Apple Developer account**
 
 ### App Icon & Splash
-- Placeholder icon at `assets/icon/app_icon.png` — emerald circle with "RL" monogram
-- Generated with `flutter pub run flutter_launcher_icons` (all Android mipmap sizes + adaptive, all iOS sizes)
-- Splash: dark `#0A0C0F` background, Android 12+ compatible
-- Generated with `flutter pub run flutter_native_splash:create`
-- **Replace placeholder before submitting** — drop final 1024×1024 PNG into `assets/icon/app_icon.png` and re-run launcher icons
+- Final icon at `mobile/assets/icon/app_icon.png` — RLV logo (black bg, white/blue lettering, blue border glow)
+- Adaptive icon background: `#000000` (matches icon)
+- Regenerated with `flutter pub run flutter_launcher_icons` (Android standard + adaptive, iOS)
+- Splash uses same logo on dark `#0A0C0F` background; regenerated with `flutter pub run flutter_native_splash:create`
 
 ---
 
