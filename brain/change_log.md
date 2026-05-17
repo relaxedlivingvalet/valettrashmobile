@@ -5,6 +5,18 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-16 (Session 11 — Owner handoff prep)
+
+- **Files Modified**:
+  - `mobile/README.md` — full rewrite as owner handoff guide: feature walkthrough per role, test credentials, step-by-step App Store + Google Play submission guide, Supabase production config steps, future features list
+  - `mobile/android/.gitignore` — commented out keystore/jks/key.properties exclusions so signing artifacts are committed (repo is private)
+  - `brain/test_credentials.md` — fixed stale `owner` role mapping (was "falls through to resident", now correctly `OwnerDashboardScreen`)
+  - `brain/current_state.md` — updated Known Issues to reflect `.env`, keystore, and `key.properties` are all committed
+
+- **Committed to repo**: `mobile/android/upload-keystore.jks` and `mobile/android/key.properties` (previously gitignored)
+
+---
+
 ### 2026-05-16 (Session 9 — super_admin account, password reset flow, visibility toggles)
 
 - **DB changes** (Supabase dashboard):

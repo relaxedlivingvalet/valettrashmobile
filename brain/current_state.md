@@ -112,7 +112,8 @@ Full list in `brain/test_credentials.md`. Quick reference:
 
 ## Known Issues / Constraints
 - `supabase_flutter` pinned at v1.10.25 — v2 upgrade blocked by missing transitive deps in this environment; try on a machine with full internet access
-- `.env` is not committed — developers need `mobile/.env` with `SUPABASE_URL` and `SUPABASE_ANON_KEY`
+- `.env` is committed (anon key only — publishable, safe to expose in client code)
+- `android/upload-keystore.jks` and `android/key.properties` are committed — repo is private
 - `withOpacity` deprecation warnings (info only, not errors) — use `.withValues(alpha: ...)` to silence
 - `PmComplianceReportScreen` uses `dart:html` for CSV export — web only; will need `dart:io` path for native builds
 - Worker location sharing uses `dart:html` geolocation — web only; needs `geolocator` package for native

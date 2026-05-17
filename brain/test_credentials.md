@@ -41,7 +41,7 @@ App runs at: `http://localhost:8091`
 | `property_manager` | `PropertyManagerDashboardNewScreen` |
 | `driver` | `WorkerDashboardScreen` |
 | `resident` | `ResidentDashboardScreen` |
-| `owner` | Falls through to `ResidentDashboardScreen` (not yet implemented) |
+| `owner` | `OwnerDashboardScreen` (light theme) |
 
 ## Notes
 
