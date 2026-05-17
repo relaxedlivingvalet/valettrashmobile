@@ -395,26 +395,11 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
               onTap: (i) => setState(() => _tabIndex = i),
               accent: AppColors.worker,
               items: const [
-                RoleNavItem(
-                  icon: Icons.map_outlined,
-                  activeIcon: Icons.map,
-                  label: 'Route',
-                ),
-                RoleNavItem(
-                  icon: Icons.replay_outlined,
-                  activeIcon: Icons.replay,
-                  label: 'Comebacks',
-                ),
-                RoleNavItem(
-                  icon: Icons.warning_amber_outlined,
-                  activeIcon: Icons.warning_amber,
-                  label: 'Violations',
-                ),
-                RoleNavItem(
-                  icon: Icons.person_outline,
-                  activeIcon: Icons.person,
-                  label: 'Profile',
-                ),
+                RoleNavItem(icon: Icons.map_outlined, activeIcon: Icons.map, label: 'Route'),
+                RoleNavItem(icon: Icons.list_alt_outlined, activeIcon: Icons.list_alt, label: 'Stops'),
+                RoleNavItem(icon: Icons.qr_code_scanner_outlined, activeIcon: Icons.qr_code_scanner, label: 'Scan'),
+                RoleNavItem(icon: Icons.chat_bubble_outline, activeIcon: Icons.chat_bubble, label: 'Messages'),
+                RoleNavItem(icon: Icons.more_horiz, activeIcon: Icons.more_horiz, label: 'More'),
               ],
             ),
           ],
@@ -428,11 +413,13 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       case 0:
         return _buildRouteTab();
       case 1:
-        return _buildComebacksTab();
+        return _buildStopsTab();
       case 2:
-        return _buildViolationsTab();
+        return _buildScanTab();
+      case 3:
+        return _buildMessagesTab();
       default:
-        return _buildProfileTab();
+        return _buildMoreTab();
     }
   }
 
@@ -545,86 +532,33 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     );
   }
 
-  // ── Comebacks ─────────────────────────────────────────────────────────────────
+  // ── Stops ─────────────────────────────────────────────────────────────────────
 
-  Widget _buildComebacksTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Comebacks',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ),
-              if (_comebackRequests.isNotEmpty)
-                GlowBadge(
-                  label: '${_comebackRequests.length} pending',
-                  accent: AppColors.warning,
-                  showDot: true,
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_loading)
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: const [
-                SkeletonCard(height: 70),
-                SizedBox(height: 10),
-                SkeletonCard(height: 70),
-                SizedBox(height: 10),
-                SkeletonCard(height: 70),
-              ],
-            ),
-          )
-        else if (_comebackRequests.isEmpty)
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.check_circle_outline,
-                      size: 48, color: AppColors.success),
-                  SizedBox(height: 12),
-                  Text(
-                    'No comeback requests',
-                    style: TextStyle(
-                        color: AppColors.textMuted, fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _loadRouteData,
-              color: AppColors.worker,
-              backgroundColor: AppColors.surface1,
-              child: ListView.separated(
-                padding:
-                    const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                itemCount: _comebackRequests.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(height: 10),
-                itemBuilder: (context, i) =>
-                    _buildComebackCard(i, _comebackRequests[i]),
-              ),
-            ),
-          ),
-      ],
+  Widget _buildStopsTab() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(Icons.list_alt, size: 48, color: AppColors.textSecondary),
+          SizedBox(height: 12),
+          Text('Stops', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
+  // ── Messages ──────────────────────────────────────────────────────────────────
+
+  Widget _buildMessagesTab() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(Icons.chat_bubble_outline, size: 48, color: AppColors.textSecondary),
+          SizedBox(height: 12),
+          Text('Messages', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        ],
+      ),
     );
   }
 
@@ -702,13 +636,13 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     );
   }
 
-  // ── Violations ────────────────────────────────────────────────────────────────
+  // ── Scan ──────────────────────────────────────────────────────────────────────
 
-  Widget _buildViolationsTab() {
+  Widget _buildScanTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeader('Violations'),
+        _sectionHeader('Scan'),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -752,18 +686,48 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     );
   }
 
-  // ── Profile ───────────────────────────────────────────────────────────────────
+  // ── More ──────────────────────────────────────────────────────────────────────
 
-  Widget _buildProfileTab() {
+  Widget _buildMoreTab() {
     final initial = _email.isNotEmpty ? _email[0].toUpperCase() : 'W';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeader('Profile'),
+        _sectionHeader('More'),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
+              if (_comebackRequests.isNotEmpty) ...[
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Comebacks',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    GlowBadge(
+                      label: '${_comebackRequests.length} pending',
+                      accent: AppColors.warning,
+                      showDot: true,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ...List.generate(
+                  _comebackRequests.length,
+                  (i) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildComebackCard(i, _comebackRequests[i]),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
