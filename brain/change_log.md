@@ -5,6 +5,21 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-17 — Session 13: Brand mockup alignment across all 5 dashboards
+
+- **Files Modified** (5 parallel agents, no conflicts):
+  - `manager_dashboard_screen.dart` (OM) — "Operations Overview" header + Today pill; Communities/Routes stat row; large On-Time %; Missed count; Service Completion chart switched to 0-100% completion rate y-axis
+  - `worker_dashboard_screen.dart` — "Hello [name]" + "You have N stops today" header; donut center % text overlay; "N of M Stops Complete" label; Next Stop card showing next unit + property name
+  - `resident_dashboard_screen.dart` — Property name + dropdown chevron in header; bell notification icon; "All Clear / No missed collections" status when no active run
+  - `property_manager_dashboard_new.dart` — "Property Manager View" title + "All Properties" filter pill; Open Requests count card (queries pending comebacks); Work Orders placeholder; Announcements list from `community_announcements`; compliance/satisfaction moved below
+  - `owner_dashboard_screen.dart` — "Portfolio Summary" + "This Month" filter pill; Service Savings card with month-over-month % delta; Resident Satisfaction with delta; both query prior-month data from Supabase
+
+- **Colors**: All dashboards already used correct brand palette — no AppColors changes needed (#0A0A0A, #1A1A1A, #3A3A3A, #6B6B6B, #E5E5E5, #0A84FF)
+
+- **Result**: `flutter test` — All tests passed. `flutter analyze` — 0 errors, 0 new warnings in any edited file.
+
+---
+
 ### 2026-05-17 — Session 13: Comeback entry point restored + lint finalization
 
 - **Files Modified**:

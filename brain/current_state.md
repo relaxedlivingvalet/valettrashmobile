@@ -1,7 +1,7 @@
 # Current State
 
 ## Current Objective
-**All 5 role dashboards rebuilt to RLV brand spec.** Comeback pickup entry point wired back into resident dashboard. `flutter analyze` — 0 errors, 0 actionable warnings across entire `lib/`. Native Android/iOS platform directories configured. Final RLV app icon installed. Waiting on Apple Developer account before iOS submission.
+**All 5 dashboards pixel-aligned to RLV brand mockup.** Every overview screen now matches the mockup layout, stats, labels, and color palette exactly. `flutter analyze` — 0 errors, 0 actionable warnings. Native Android/iOS configured. Waiting on Apple Developer account before iOS submission.
 
 ## Run the App
 ```powershell
