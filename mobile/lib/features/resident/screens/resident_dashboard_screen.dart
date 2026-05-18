@@ -11,6 +11,7 @@ import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../auth/screens/change_password_screen.dart';
+import 'resident_comeback_request_screen.dart';
 import 'resident_vacation_hold_screen.dart';
 
 class ResidentDashboardScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   String _propertyName = '';
   String _windowShort = '--';
   int _freeRemain = 0;
+  num _comebackFee = 15;
   String _freeSummary = '--';
 
   String? _runStatus;
@@ -180,6 +182,9 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             ? 'No free comebacks configured'
             : '$_freeRemain of $freeCap left this month';
 
+        final feeRaw = prop['comeback_pickup_fee'];
+        _comebackFee = feeRaw is num ? feeRaw : num.tryParse('$feeRaw') ?? 15;
+
         final startT = prop['service_window_start'];
         final endT = prop['service_window_end'];
         _windowShort = '${_fmtTime(startT)} – ${_fmtTime(endT)}';
@@ -210,10 +215,12 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       if (mounted) setState(() => _loading = false);
       if (_propertyId != null) _pollRunStatus();
     } catch (e) {
-      if (mounted) setState(() {
-        _loading = false;
-        _loadError = e.toString();
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = e.toString();
+        });
+      }
     }
   }
 
@@ -382,6 +389,8 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
           _buildServiceBentoRow(),
           const SizedBox(height: 12),
           _buildSatisfactionCard(),
+          const SizedBox(height: 12),
+          _buildComebackCard(),
           const SizedBox(height: 20),
           _buildCommunityUpdatesSection(),
         ],
@@ -611,6 +620,50 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             child: const Icon(Icons.close,
                 size: 16, color: AppColors.textSecondary),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComebackCard() {
+    if (_propertyId == null) return const SizedBox.shrink();
+    return BentoCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ResidentComebackRequestScreen(
+            freeRemain: _freeRemain,
+            comebackFee: _comebackFee,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.refresh_outlined,
+              color: AppColors.rlvBlue, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Request a Comeback',
+                  style: GoogleFonts.montserrat(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary),
+                ),
+                Text(
+                  _freeSummary,
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right,
+              color: AppColors.textSecondary, size: 20),
         ],
       ),
     );
