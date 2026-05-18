@@ -31,7 +31,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   List<Map<String, dynamic>> _properties = [];
   int _completedComebacks = 0;
   double _avgSatisfaction = 0;
-  String? _firstName;
+  int _lastMonthCompletedComebacks = 0;
+  double _lastMonthAvgSatisfaction = 0;
 
   AppColorsScheme _c = AppColorsScheme.dark;
 
@@ -90,21 +91,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       _error = null;
     });
     final client = Supabase.instance.client;
-    final uid = client.auth.currentUser?.id;
 
     try {
-      // Load profile name
-      if (uid != null) {
-        try {
-          final profile = await client
-              .from('users')
-              .select('first_name')
-              .eq('id', uid)
-              .maybeSingle();
-          if (profile != null) _firstName = profile['first_name']?.toString();
-        } catch (_) {}
-      }
-
       final propsRows = await client
           .from('properties')
           .select(
@@ -183,10 +171,45 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         } catch (_) {}
       }
 
+      // Month-over-month: last month's comebacks and satisfaction
+      int lastMonthCb = 0;
+      double lastMonthRating = 0;
+      try {
+        final now = DateTime.now();
+        final firstOfThisMonth = DateTime(now.year, now.month, 1).toUtc().toIso8601String();
+        final firstOfLastMonth = DateTime(now.year, now.month - 1, 1).toUtc().toIso8601String();
+
+        final allPropIds2 = properties.map((p) => p['id'] as String).toList();
+
+        final lastMonthComebacks = await client
+            .from('missed_pickup_requests')
+            .select('id')
+            .gte('completed_at', firstOfLastMonth)
+            .lt('completed_at', firstOfThisMonth)
+            .eq('status', 'completed');
+        lastMonthCb = (lastMonthComebacks as List).length;
+
+        if (allPropIds2.isNotEmpty) {
+          final lastMonthRatings = await client
+              .from('satisfaction_ratings')
+              .select('rating')
+              .filter('property_id', 'in', '(${allPropIds2.join(',')})')
+              .gte('created_at', firstOfLastMonth)
+              .lt('created_at', firstOfThisMonth);
+          final ratingList2 = lastMonthRatings as List;
+          if (ratingList2.isNotEmpty) {
+            final sum = ratingList2.fold<double>(0, (acc, r) => acc + (r['rating'] as int? ?? 0).toDouble());
+            lastMonthRating = sum / ratingList2.length;
+          }
+        }
+      } catch (_) {}
+
       setState(() {
         _properties = properties;
         _completedComebacks = completedCb;
         _avgSatisfaction = avgRating;
+        _lastMonthCompletedComebacks = lastMonthCb;
+        _lastMonthAvgSatisfaction = lastMonthRating;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -307,10 +330,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     final activationRate = _totalUnits > 0
         ? '${(_totalResidents / _totalUnits * 100).toStringAsFixed(1)}%'
         : '—';
-    final earnedFromComebacks = '\$${(_completedComebacks * 15).toStringAsFixed(0)}';
-    final satisfactionDisplay = _avgSatisfaction > 0
-        ? _avgSatisfaction.toStringAsFixed(1)
-        : '--';
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -319,87 +338,31 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: [
-          // Greeting
+          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Portfolio',
-                      style: GoogleFonts.inter(
-                          fontSize: 13, color: AppColors.textSecondary)),
-                  Text(
-                    _firstName ?? 'Owner',
-                    style: GoogleFonts.montserrat(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary),
-                  ),
-                ],
+              Text(
+                'Portfolio Summary',
+                style: GoogleFonts.montserrat(fontSize: 20, fontWeight: FontWeight.w800, color: _c.textPrimary),
               ),
-              GlowBadge(label: 'Owner', accent: AppColors.rlvBlue, showDot: false),
+              _buildThisMonthPill(),
             ],
           ),
           const SizedBox(height: 20),
-          // Bento 2×2 grid
-          Row(
-            children: [
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Communities',
-                    value: '$_totalProperties',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Total Units',
-                    value: '$_totalUnits',
-                  ),
-                ),
-              ),
-            ],
-          ),
+          // Communities / Total Units row
+          Row(children: [
+            Expanded(child: BentoCard(height: 90, child: MetricTile(label: 'Communities', value: '$_totalProperties'))),
+            const SizedBox(width: 12),
+            Expanded(child: BentoCard(height: 90, child: MetricTile(label: 'Total Units', value: '$_totalUnits'))),
+          ]),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Earned (CB)',
-                    value: earnedFromComebacks,
-                    valueColor: AppColors.success,
-                    subtitle: '$_completedComebacks comebacks',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Satisfaction',
-                    value: satisfactionDisplay,
-                    valueColor: _avgSatisfaction >= 4
-                        ? AppColors.success
-                        : _avgSatisfaction >= 3
-                            ? AppColors.warning
-                            : _avgSatisfaction > 0
-                                ? AppColors.error
-                                : AppColors.textPrimary,
-                    subtitle: _avgSatisfaction > 0 ? '/ 5.0' : 'No ratings yet',
-                  ),
-                ),
-              ),
-            ],
-          ),
+          // Service Savings with delta
+          _buildSavingsCard(),
+          const SizedBox(height: 12),
+          // Satisfaction with delta
+          _buildSatisfactionBento(),
           const SizedBox(height: 12),
           // Activation bento
           BentoCard(
@@ -463,6 +426,137 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               ),
             ],
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThisMonthPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('This Month', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: _c.textPrimary)),
+          const SizedBox(width: 4),
+          Icon(Icons.keyboard_arrow_down, size: 16, color: _c.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSavingsCard() {
+    final thisMonthSavings = _completedComebacks * 15;
+    final lastMonthSavings = _lastMonthCompletedComebacks * 15;
+    final delta = lastMonthSavings > 0
+        ? ((thisMonthSavings - lastMonthSavings) / lastMonthSavings * 100).round()
+        : 0;
+    final hasDelta = lastMonthSavings > 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SERVICE SAVINGS', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: _c.textSecondary)),
+                const SizedBox(height: 4),
+                Text('\$$thisMonthSavings', style: GoogleFonts.montserrat(fontSize: 32, fontWeight: FontWeight.w800, color: _c.textPrimary, height: 1.0)),
+                if (hasDelta)
+                  Text('vs last month', style: GoogleFonts.inter(fontSize: 11, color: _c.textSecondary)),
+              ],
+            ),
+          ),
+          if (hasDelta)
+            Row(
+              children: [
+                Icon(
+                  delta >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 14,
+                  color: delta >= 0 ? AppColors.success : AppColors.error,
+                ),
+                Text(
+                  '${delta.abs()}%',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: delta >= 0 ? AppColors.success : AppColors.error,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSatisfactionBento() {
+    final satisfactionDisplay = _avgSatisfaction > 0 ? _avgSatisfaction.toStringAsFixed(1) : '--';
+    final delta = (_lastMonthAvgSatisfaction > 0 && _avgSatisfaction > 0)
+        ? ((_avgSatisfaction - _lastMonthAvgSatisfaction) / _lastMonthAvgSatisfaction * 100).round()
+        : 0;
+    final hasDelta = _lastMonthAvgSatisfaction > 0 && _avgSatisfaction > 0;
+    final satisfColor = _avgSatisfaction >= 4 ? AppColors.success : _avgSatisfaction >= 3 ? AppColors.warning : _avgSatisfaction > 0 ? AppColors.error : _c.textPrimary;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('RESIDENT SATISFACTION', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: _c.textSecondary)),
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(satisfactionDisplay, style: GoogleFonts.montserrat(fontSize: 32, fontWeight: FontWeight.w800, color: satisfColor, height: 1.0)),
+                    if (_avgSatisfaction > 0) ...[
+                      const SizedBox(width: 4),
+                      Text('/ 5', style: GoogleFonts.inter(fontSize: 14, color: _c.textSecondary)),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (hasDelta)
+            Row(
+              children: [
+                Icon(
+                  delta >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 14,
+                  color: delta >= 0 ? AppColors.success : AppColors.error,
+                ),
+                Text(
+                  '${delta.abs()}%',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: delta >= 0 ? AppColors.success : AppColors.error,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

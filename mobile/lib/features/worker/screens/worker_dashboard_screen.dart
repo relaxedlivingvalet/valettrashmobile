@@ -644,17 +644,18 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Tonight\'s Route',
-                    style: GoogleFonts.inter(
-                        fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                  Text(
-                    _firstName ?? 'Worker',
+                    'Hello, ${_firstName ?? 'there'}',
                     style: GoogleFonts.montserrat(
                       fontSize: 26,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                     ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'You have ${_stops.length + _completedStopCount} stops today',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -694,31 +695,45 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                                         fontSize: 12,
                                         color: AppColors.textSecondary)),
                               )
-                            : PieChart(
-                                PieChartData(
-                                  centerSpaceRadius: 28,
-                                  sectionsSpace: 2,
-                                  sections: [
-                                    PieChartSectionData(
-                                      value: _completedStopCount.toDouble(),
-                                      color: AppColors.success,
-                                      radius: 18,
-                                      title: '',
+                            : Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  PieChart(
+                                    PieChartData(
+                                      centerSpaceRadius: 28,
+                                      sectionsSpace: 2,
+                                      sections: [
+                                        PieChartSectionData(
+                                          value: _completedStopCount.toDouble(),
+                                          color: AppColors.success,
+                                          radius: 18,
+                                          title: '',
+                                        ),
+                                        PieChartSectionData(
+                                          value: _stops.length.toDouble(),
+                                          color: AppColors.surface2,
+                                          radius: 18,
+                                          title: '',
+                                        ),
+                                      ],
                                     ),
-                                    PieChartSectionData(
-                                      value: _stops.length.toDouble(),
-                                      color: AppColors.surface2,
-                                      radius: 18,
-                                      title: '',
+                                  ),
+                                  if (_completedStopCount + _stops.length > 0)
+                                    Text(
+                                      '${(_completedStopCount / (_completedStopCount + _stops.length) * 100).round()}%',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textPrimary,
+                                      ),
                                     ),
-                                  ],
-                                ),
+                                ],
                               ),
                       ),
                       Text(
-                        '${(_completedStopCount)}/$totalStops done',
+                        '$_completedStopCount of $totalStops Stops Complete',
                         style: GoogleFonts.inter(
-                            fontSize: 11, color: AppColors.textSecondary),
+                            fontSize: 10, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
@@ -805,7 +820,59 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          if (_stops.isNotEmpty)
+            BentoCard(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.rlvBlue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.location_on_outlined,
+                        color: AppColors.rlvBlue, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'NEXT STOP',
+                          style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.2,
+                              color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Unit ${_stops[_currentStopIndex]['unit_number']}',
+                          style: GoogleFonts.montserrat(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary),
+                        ),
+                        Text(
+                          _assignedProperty,
+                          style: GoogleFonts.inter(
+                              fontSize: 11, color: AppColors.textSecondary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right,
+                      color: AppColors.textSecondary, size: 20),
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
           SizedBox(
             height: 52,
             child: ElevatedButton.icon(

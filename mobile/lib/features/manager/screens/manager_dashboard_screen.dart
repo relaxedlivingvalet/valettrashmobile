@@ -167,9 +167,11 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
             .filter('property_id', 'in', '(${propIds.join(',')})')
             .order('run_date');
         final Map<String, int> completedByDay = {};
+        final Map<String, int> totalByDay = {};
         for (final r in (runsForChart as List)) {
+          final day = (r['run_date'] as String).substring(0, 10);
+          totalByDay[day] = (totalByDay[day] ?? 0) + 1;
           if (r['status'] == 'completed') {
-            final day = (r['run_date'] as String).substring(0, 10);
             completedByDay[day] = (completedByDay[day] ?? 0) + 1;
           }
         }
@@ -177,8 +179,10 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
           final day = DateTime.now().subtract(Duration(days: i));
           final key =
               '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-          spots.add(FlSpot((6 - i).toDouble(),
-              (completedByDay[key] ?? 0).toDouble()));
+          final total = totalByDay[key] ?? 0;
+          final completed = completedByDay[key] ?? 0;
+          final rate = total > 0 ? completed / total : 0.0;
+          spots.add(FlSpot((6 - i).toDouble(), rate));
           labels.add('${day.month}/${day.day}');
         }
       } catch (_) {}
@@ -344,94 +348,146 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         ),
       );
     }
+
+    // Compute on-time %
+    final totalRuns = _runs.length;
+    final completedRuns = _runs.where((r) => r['status'] == 'completed').length;
+    final onTimePct = totalRuns > 0 ? (completedRuns / totalRuns * 100).round() : 0;
+
     return RefreshIndicator(
       onRefresh: _loadData,
-      color: AppColors.manager,
+      color: AppColors.rlvBlue,
       backgroundColor: AppColors.surface1,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: [
-          // Greeting
+          // Error banner (if last load failed)
+          if (_error != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      size: 16, color: AppColors.error),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Some data may be stale — pull to refresh.',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.error),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          // Header row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Operations',
-                      style: GoogleFonts.inter(
-                          fontSize: 13, color: AppColors.textSecondary)),
                   Text(
-                    _firstName ?? 'Manager',
+                    'Operations Overview',
                     style: GoogleFonts.montserrat(
-                        fontSize: 26,
+                        fontSize: 20,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary),
                   ),
+                  if (_firstName != null)
+                    Text(
+                      _firstName!,
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.textSecondary),
+                    ),
                 ],
               ),
-              GlowBadge(
-                label: _error != null ? 'Error' : 'Ops Manager',
-                accent: _error != null ? AppColors.error : AppColors.rlvBlue,
-                showDot: _error == null,
-              ),
+              _buildTodayPill(),
             ],
           ),
           const SizedBox(height: 20),
-          // 2×2 bento metrics
-          Row(
-            children: [
-              Expanded(
+          // Communities / Routes 2-col stat row
+          Row(children: [
+            Expanded(
                 child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Properties',
-                    value: '${_propertyIds.length}',
+                    height: 90,
+                    child: MetricTile(
+                        label: 'Communities',
+                        value: '${_propertyIds.length}'))),
+            const SizedBox(width: 12),
+            Expanded(
+                child: BentoCard(
+                    height: 90,
+                    child: MetricTile(
+                        label: 'Routes', value: '${_runs.length}'))),
+          ]),
+          const SizedBox(height: 12),
+          // On-Time % large + Missed inline
+          BentoCard(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ON-TIME %',
+                        style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$onTimePct%',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 42,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.rlvBlue,
+                            height: 1.0),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Workers',
-                    value: '${_workers.length}',
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'MISSED',
+                      style: GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.2,
+                          color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$_pendingComebacks',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                          color: _pendingComebacks > 0
+                              ? AppColors.warning
+                              : AppColors.textPrimary,
+                          height: 1.0),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Runs Today',
-                    value: '${_runs.length}',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Comebacks',
-                    value: '$_pendingComebacks',
-                    valueColor: _pendingComebacks > 0
-                        ? AppColors.warning
-                        : AppColors.textPrimary,
-                    subtitle: 'pending',
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // 7-day completion line chart
+          // Service Completion chart
           if (_serviceCompletionSpots.isNotEmpty)
             BentoCard(
               height: 200,
@@ -440,7 +496,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '7-DAY COMPLETIONS',
+                    'SERVICE COMPLETION',
                     style: GoogleFonts.inter(
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
@@ -451,17 +507,28 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                   Expanded(
                     child: LineChart(
                       LineChartData(
+                        minY: 0,
+                        maxY: 1,
                         gridData: FlGridData(
                           show: true,
                           drawVerticalLine: false,
+                          horizontalInterval: 0.25,
                           getDrawingHorizontalLine: (_) => FlLine(
-                            color: AppColors.border,
-                            strokeWidth: 0.5,
-                          ),
+                              color: AppColors.border, strokeWidth: 0.5),
                         ),
                         titlesData: FlTitlesData(
                           leftTitles: AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
+                              sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: 0.25,
+                            reservedSize: 36,
+                            getTitlesWidget: (v, _) => Text(
+                              '${(v * 100).toInt()}%',
+                              style: GoogleFonts.inter(
+                                  fontSize: 9,
+                                  color: AppColors.textSecondary),
+                            ),
+                          )),
                           rightTitles: AxisTitles(
                               sideTitles: SideTitles(showTitles: false)),
                           topTitles: AxisTitles(
@@ -472,7 +539,8 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                               interval: 2,
                               getTitlesWidget: (value, meta) {
                                 final idx = value.toInt();
-                                if (idx < 0 || idx >= _dateLabels.length) {
+                                if (idx < 0 ||
+                                    idx >= _dateLabels.length) {
                                   return const SizedBox.shrink();
                                 }
                                 return Padding(
@@ -498,7 +566,8 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                             dotData: FlDotData(show: false),
                             belowBarData: BarAreaData(
                               show: true,
-                              color: AppColors.rlvBlue.withValues(alpha: 0.08),
+                              color:
+                                  AppColors.rlvBlue.withValues(alpha: 0.08),
                             ),
                           ),
                         ],
@@ -508,18 +577,39 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                 ],
               ),
             ),
-          if (_serviceCompletionSpots.isNotEmpty) const SizedBox(height: 20),
+          // Tonight's runs
           if (_runs.isNotEmpty) ...[
+            const SizedBox(height: 20),
             _sectionLabel("TONIGHT'S RUNS"),
             const SizedBox(height: 8),
             ..._runs.map((run) => _buildRunCard(run)),
-            const SizedBox(height: 20),
           ],
-          if (_comebackHistory.isNotEmpty) ...[
-            _sectionLabel('COMEBACK HISTORY (7 DAYS)'),
-            const SizedBox(height: 8),
-            ..._comebackHistory.take(5).map((h) => _buildHistoryCard(h)),
-          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTodayPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Today',
+            style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.keyboard_arrow_down,
+              size: 16, color: AppColors.textSecondary),
         ],
       ),
     );

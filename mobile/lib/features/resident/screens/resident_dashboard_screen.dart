@@ -413,16 +413,24 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
           children: [
             Text(
               greeting,
-              style: GoogleFonts.inter(
-                  fontSize: 13, color: AppColors.textSecondary),
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
             ),
-            Text(
-              _firstName,
-              style: GoogleFonts.montserrat(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
+            Row(
+              children: [
+                Text(
+                  _propertyName.isEmpty ? _firstName : _propertyName,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (_propertyName.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down,
+                      size: 18, color: AppColors.textSecondary),
+                ],
+              ],
             ),
           ],
         ),
@@ -430,13 +438,18 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: AppColors.rlvBlue.withValues(alpha: 0.12),
+            color: AppColors.surface1,
             shape: BoxShape.circle,
-            border: Border.all(
-                color: AppColors.rlvBlue.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.border),
           ),
-          child: const Icon(Icons.person_outline,
-              color: AppColors.rlvBlue, size: 22),
+          child: Stack(
+            children: [
+              const Center(
+                child: Icon(Icons.notifications_outlined,
+                    color: AppColors.textPrimary, size: 22),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -529,14 +542,24 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
                     color: AppColors.textSecondary,
                   ),
                 ),
-                Icon(statusIcon, color: statusColor, size: 36),
-                Text(
-                  statusLabel,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+                Icon(statusIcon, color: statusColor, size: 32),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isCompleted ? 'Done' : isInProgress ? 'Active' : 'All Clear',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                    ),
+                    if (!isCompleted && !isInProgress)
+                      Text(
+                        'No missed\ncollections',
+                        style: GoogleFonts.inter(fontSize: 9, color: AppColors.textSecondary),
+                      ),
+                  ],
                 ),
               ],
             ),

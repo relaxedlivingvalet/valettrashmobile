@@ -31,15 +31,21 @@ class _PropertyManagerDashboardNewScreenState
 
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _inviteCodes = [];
+  // ignore: unused_field
   List<Map<String, dynamic>> _recentRuns = [];
+  // ignore: unused_field
   String? _firstName;
   double _avgSatisfaction = 0;
   double _serviceCompliance = 0; // 0.0 – 1.0
+  int _openRequestsCount = 0;
+  List<Map<String, dynamic>> _recentAnnouncements = [];
 
   AppColorsScheme _c = AppColorsScheme.dark;
 
+  // ignore: unused_element
   int get _totalUnits =>
       _properties.fold(0, (s, p) => s + (p['unit_count'] as int? ?? 0));
+  // ignore: unused_element
   int get _totalResidents =>
       _properties.fold(0, (s, p) => s + (p['resident_count'] as int? ?? 0));
   @override
@@ -218,6 +224,8 @@ class _PropertyManagerDashboardNewScreenState
       List<Map<String, dynamic>> recentRuns = [];
       double avgSatisfaction = 0;
       double serviceCompliance = 0;
+      int openRequestsCount = 0;
+      List<Map<String, dynamic>> recentAnnouncements = [];
       final allPropIds = properties.map((p) => p['id'] as String).toList();
       if (allPropIds.isNotEmpty) {
         try {
@@ -247,6 +255,26 @@ class _PropertyManagerDashboardNewScreenState
             avgSatisfaction = sum / ratingList.length;
           }
         } catch (_) {}
+
+        // Open requests: pending comeback requests for PM's properties
+        try {
+          final openReqs = await client
+              .from('missed_pickup_requests')
+              .select('id')
+              .eq('status', 'pending');
+          openRequestsCount = (openReqs as List).length;
+        } catch (_) {}
+
+        // Recent announcements for PM's properties
+        try {
+          final announcements = await client
+              .from('community_announcements')
+              .select('id, title, body, created_at, property_id')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})')
+              .order('created_at', ascending: false)
+              .limit(3);
+          recentAnnouncements = List<Map<String, dynamic>>.from(announcements as List);
+        } catch (_) {}
       }
 
       setState(() {
@@ -255,6 +283,8 @@ class _PropertyManagerDashboardNewScreenState
         _recentRuns = recentRuns;
         _avgSatisfaction = avgSatisfaction;
         _serviceCompliance = serviceCompliance;
+        _openRequestsCount = openRequestsCount;
+        _recentAnnouncements = recentAnnouncements;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -386,76 +416,127 @@ class _PropertyManagerDashboardNewScreenState
         ),
       );
     }
-    final compliancePct = (_serviceCompliance * 100).toStringAsFixed(0);
-    final satisfactionDisplay =
-        _avgSatisfaction > 0 ? _avgSatisfaction.toStringAsFixed(1) : '--';
-
     return RefreshIndicator(
       onRefresh: _loadData,
-      color: AppColors.manager,
+      color: AppColors.rlvBlue,
       backgroundColor: _c.surface1,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: [
-          // Greeting
+          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Dashboard',
-                      style: GoogleFonts.inter(
-                          fontSize: 13, color: AppColors.textSecondary)),
-                  Text(
-                    _firstName ?? 'Property Manager',
-                    style: GoogleFonts.montserrat(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary),
-                  ),
-                ],
+              Text(
+                'Property Manager View',
+                style: GoogleFonts.montserrat(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: _c.textPrimary,
+                ),
               ),
-              GlowBadge(
-                  label: 'PM',
-                  accent: AppColors.rlvBlue,
-                  showDot: false),
+              _buildAllPropertiesPill(),
             ],
           ),
           const SizedBox(height: 20),
-          // 2×2 bento grid
-          Row(
-            children: [
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Total Units',
-                    value: '$_totalUnits',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: BentoCard(
-                  height: 100,
-                  child: MetricTile(
-                    label: 'Residents',
-                    value: '$_totalResidents',
-                  ),
-                ),
-              ),
-            ],
+          // Open Requests card
+          _buildRequestCard(
+            label: 'Open Requests',
+            count: _openRequestsCount,
+            linkLabel: 'View all',
+            onTap: () => setState(() => _tabIndex = 2),
+            countColor: _openRequestsCount > 0 ? AppColors.warning : AppColors.rlvBlue,
           ),
           const SizedBox(height: 12),
+          // Work Orders card (placeholder — no work_orders table yet)
+          _buildRequestCard(
+            label: 'Work Orders',
+            count: 0,
+            linkLabel: 'In Progress',
+            onTap: null,
+            countColor: _c.textPrimary,
+          ),
+          const SizedBox(height: 20),
+          // Announcements section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ANNOUNCEMENTS',
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                  color: _c.textSecondary,
+                ),
+              ),
+              if (_recentAnnouncements.isNotEmpty)
+                TextButton(
+                  onPressed: _showAnnouncementSheet,
+                  style: TextButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'New +',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.rlvBlue),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_recentAnnouncements.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _c.surface1,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _c.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.campaign_outlined, size: 20, color: _c.textSecondary),
+                  const SizedBox(width: 12),
+                  Text(
+                    'No announcements yet',
+                    style: GoogleFonts.inter(fontSize: 13, color: _c.textSecondary),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._recentAnnouncements.map((a) => _buildAnnouncementRow(a)),
+          const SizedBox(height: 20),
+          // Send Announcement button
+          SizedBox(
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: _showAnnouncementSheet,
+              icon: const Icon(Icons.campaign_outlined),
+              label: Text(
+                'Send Community Announcement',
+                style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.rlvBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+            ),
+          ),
+          // Compliance / satisfaction metrics
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
                 child: BentoCard(
-                  height: 100,
+                  height: 90,
                   child: MetricTile(
                     label: 'Compliance',
-                    value: '$compliancePct%',
+                    value: '${(_serviceCompliance * 100).toStringAsFixed(0)}%',
                     valueColor: _serviceCompliance >= 0.9
                         ? AppColors.success
                         : _serviceCompliance >= 0.7
@@ -467,120 +548,153 @@ class _PropertyManagerDashboardNewScreenState
               const SizedBox(width: 12),
               Expanded(
                 child: BentoCard(
-                  height: 100,
+                  height: 90,
                   child: MetricTile(
                     label: 'Satisfaction',
-                    value: satisfactionDisplay,
+                    value: _avgSatisfaction > 0 ? _avgSatisfaction.toStringAsFixed(1) : '--',
                     valueColor: _avgSatisfaction >= 4
                         ? AppColors.success
                         : _avgSatisfaction >= 3
                             ? AppColors.warning
                             : _avgSatisfaction > 0
                                 ? AppColors.error
-                                : AppColors.textPrimary,
+                                : _c.textPrimary,
                     subtitle: _avgSatisfaction > 0 ? '/ 5.0' : 'No ratings',
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          // Send Announcement button
-          SizedBox(
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _showAnnouncementSheet,
-              icon: const Icon(Icons.campaign_outlined),
-              label: Text(
-                'Send Community Announcement',
-                style: GoogleFonts.montserrat(
-                    fontSize: 14, fontWeight: FontWeight.w700),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.rlvBlue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllPropertiesPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'All Properties',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: _c.textPrimary,
             ),
           ),
-          // Recent runs
-          if (_recentRuns.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Text(
-              'RECENT RUNS',
-              style: GoogleFonts.inter(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                  color: AppColors.textSecondary),
+          const SizedBox(width: 4),
+          Icon(Icons.keyboard_arrow_down, size: 16, color: _c.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequestCard({
+    required String label,
+    required int count,
+    required String linkLabel,
+    required VoidCallback? onTap,
+    required Color countColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: GoogleFonts.inter(fontSize: 13, color: _c.textSecondary)),
+                const SizedBox(height: 2),
+                Text(
+                  '$count',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: countColor,
+                    height: 1.0,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            ..._recentRuns.take(5).map((run) {
-              final status = run['status'] as String? ?? 'unknown';
-              final propData = run['properties'];
-              final propName = propData is Map
-                  ? propData['name']?.toString() ?? 'Property'
-                  : 'Property';
-              final runDate = (run['run_date'] as String? ?? '').substring(0, 10);
-              final completed = run['completed_units'] as int? ?? 0;
-              final total = run['total_units'] as int? ?? 0;
-              final statusColor = status == 'completed'
-                  ? AppColors.success
-                  : status == 'in_progress'
-                      ? AppColors.rlvBlue
-                      : AppColors.textSecondary;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.surface1,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
+          ),
+          if (onTap != null)
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text('$linkLabel ›', style: GoogleFonts.inter(fontSize: 13, color: AppColors.rlvBlue)),
+            )
+          else
+            Text(linkLabel, style: GoogleFonts.inter(fontSize: 13, color: _c.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementRow(Map<String, dynamic> a) {
+    final title = a['title']?.toString() ?? '';
+    final body = a['body']?.toString() ?? '';
+    final createdAt = a['created_at']?.toString() ?? '';
+    String dateLabel = '';
+    try {
+      final dt = DateTime.parse(createdAt).toLocal();
+      dateLabel = '${dt.month}/${dt.day}';
+    } catch (_) {}
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _c.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(propName,
-                              style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary)),
-                          Text(runDate,
-                              style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary)),
-                        ],
-                      ),
-                    ),
-                    if (total > 0)
-                      Text('$completed/$total',
-                          style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.textSecondary)),
-                    const SizedBox(width: 8),
-                    GlowBadge(
-                        label: status == 'completed'
-                            ? 'Done'
-                            : status == 'in_progress'
-                                ? 'Active'
-                                : 'Scheduled',
-                        accent: statusColor,
-                        showDot: status == 'in_progress'),
-                  ],
-                ),
-              );
-            }),
+                if (body.isNotEmpty)
+                  Text(
+                    body,
+                    style: GoogleFonts.inter(fontSize: 11, color: _c.textSecondary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          if (dateLabel.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(dateLabel, style: GoogleFonts.inter(fontSize: 11, color: _c.textSecondary)),
           ],
-          const SizedBox(height: 20),
-          ..._properties.map((p) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildPropertyCard(p),
-              )),
         ],
       ),
     );
@@ -766,6 +880,7 @@ class _PropertyManagerDashboardNewScreenState
     ));
   }
 
+  // ignore: unused_element
   Widget _buildPropertyCard(Map<String, dynamic> p) {
     final violations = p['violation_count'] as int? ?? 0;
     return Container(
