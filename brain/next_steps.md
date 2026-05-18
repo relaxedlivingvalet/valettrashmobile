@@ -22,7 +22,7 @@
 
 ## Next Features (prioritized)
 
-- [ ] **Stripe paid comeback requests** — in-app UI placeholder already exists; blocked on Stripe account + webhook secret. Once you have those, wire `stripe_checkout` into `ResidentComebackRequestScreen`
+- [ ] **Stripe paid comeback requests** — comeback card is now on resident Home tab; `ResidentComebackRequestScreen` already handles free/paid branching. Blocked on Stripe account + webhook secret. Once you have those, wire `stripe_checkout` into the paid path of `ResidentComebackRequestScreen`
 - [ ] **Push notifications** — defer until native build is in TestFlight / Play Store internal testing:
   - Android: FCM (Firebase Cloud Messaging) — free
   - iOS: APNs via FCM or OneSignal — requires Apple Developer account

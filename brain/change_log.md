@@ -5,6 +5,17 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-17 — Session 13: Comeback entry point restored + lint finalization
+
+- **Files Modified**:
+  - `resident_dashboard_screen.dart` — added `_buildComebackCard()` to Home tab ListView; reads `comeback_pickup_fee` from `properties` row in `_load()`; navigates to `ResidentComebackRequestScreen(freeRemain: _freeRemain, comebackFee: _comebackFee)`; fixed `curly_braces_in_flow_control_structures` lint in `_load()` catch block; added import for `resident_comeback_request_screen.dart`
+
+- **Why**: Session 12 dashboard rebuild dropped the comeback quick-action tile that was wired in Session 8. The `ResidentComebackRequestScreen` existed but was unreachable from the UI.
+
+- **Result**: `flutter analyze lib/features/resident/screens/resident_dashboard_screen.dart` → No issues found. Resident can now tap "Request a Comeback" from the Home tab.
+
+---
+
 ### 2026-05-17 — Lint cleanup: warnings + async context bugs
 
 - **Files Modified**:

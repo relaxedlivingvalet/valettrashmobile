@@ -1,7 +1,7 @@
 # Current State
 
 ## Current Objective
-**All 5 role dashboards rebuilt to RLV brand spec.** Features complete. Native Android/iOS platform directories configured. Final RLV app icon installed. `flutter analyze` — 0 errors in all 5 dashboard files. Waiting on Apple Developer account before iOS submission.
+**All 5 role dashboards rebuilt to RLV brand spec.** Comeback pickup entry point wired back into resident dashboard. `flutter analyze` — 0 errors, 0 actionable warnings across entire `lib/`. Native Android/iOS platform directories configured. Final RLV app icon installed. Waiting on Apple Developer account before iOS submission.
 
 ## Run the App
 ```powershell
@@ -121,3 +121,6 @@ Full list in `brain/test_credentials.md`. Quick reference:
 ### Shared Widgets Added (Session 12)
 - `lib/core/widgets/bento_card.dart` — dark card used across all 5 dashboards
 - `lib/core/widgets/metric_tile.dart` — metric display widget
+
+### Session 13 additions
+- `resident_dashboard_screen.dart` — `_buildComebackCard()` added to Home tab; loads `comeback_pickup_fee` from property settings; navigates to `ResidentComebackRequestScreen` with `freeRemain` + `comebackFee` params
