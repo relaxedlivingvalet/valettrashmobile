@@ -68,6 +68,16 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Resident dashboard layout + service requests
+
+- **Supabase**: `007_service_requests.sql` — `service_requests` table (service type, preferred date, message, status) + RLS for residents, owner, super_admin
+- **Resident**: Home tab matches mock layout (pickup card, stats, quick actions, services grid, support bar); bottom nav **Support** replaces Messages; service request bottom sheet with dropdown + calendar
+- **Admin**: Concerns tab → **Resident Inbox** with Concerns / Service Requests segments
+- **Owner**: More tab → **Service Requests Inbox**
+- **Files**: `resident_dashboard_screen.dart`, `service_request_sheet.dart`, `resident_concerns_screen.dart` (`ResidentSupportPanel`), `service_requests_inbox_screen.dart`, `admin_dashboard_screen.dart`, `owner_dashboard_screen.dart`
+
+---
+
 ### 2026-05-17 — Final app icon
 
 - **Files Modified**:

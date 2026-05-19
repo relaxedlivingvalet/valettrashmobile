@@ -6,6 +6,7 @@ import '../../auth/screens/change_password_screen.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/skeleton_card.dart';
+import '../../shared/screens/service_requests_inbox_screen.dart';
 import 'admin_invite_codes_screen.dart';
 
 // ── Roles available for assignment ────────────────────────────────────────────
@@ -54,6 +55,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   List<Map<String, dynamic>> _concerns = [];
   bool _concernsLoading = true;
   String _concernFilter = 'open';
+  String _inboxSegment = 'concerns';
+  List<Map<String, dynamic>> _serviceRequests = [];
+  bool _serviceRequestsLoading = true;
+  String _serviceRequestFilter = 'open';
 
   @override
   void didChangeDependencies() {
@@ -68,6 +73,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _loadProperties();
     _loadResidents();
     _loadConcerns();
+    _loadServiceRequests();
   }
 
   // ── Data loading ─────────────────────────────────────────────────────────────
@@ -202,6 +208,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           .from('resident_concerns')
           .update({'status': status}).eq('id', id);
       _loadConcerns();
+    } catch (e) {
+      _snack('Update failed: $e', error: true);
+    }
+  }
+
+  Future<void> _loadServiceRequests() async {
+    setState(() => _serviceRequestsLoading = true);
+    try {
+      final rows = await Supabase.instance.client
+          .from('service_requests')
+          .select(
+              'id, service_type, preferred_date, message, status, created_at, '
+              'users!resident_user_id(first_name, last_name), properties(name)')
+          .order('created_at', ascending: false);
+      if (mounted) {
+        setState(() {
+          _serviceRequests =
+              List<Map<String, dynamic>>.from(rows as List);
+          _serviceRequestsLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _serviceRequestsLoading = false);
+    }
+  }
+
+  Future<void> _updateServiceRequestStatus(String id, String status) async {
+    try {
+      await Supabase.instance.client.from('service_requests').update({
+        'status': status,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', id);
+      _loadServiceRequests();
     } catch (e) {
       _snack('Update failed: $e', error: true);
     }
@@ -854,24 +893,63 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // ── Concerns Tab ─────────────────────────────────────────────────────────────
 
   Widget _buildConcernsTab(AppColorsScheme c) {
-    final filtered =
-        _concerns.where((x) => x['status'] == _concernFilter).toList();
+    final isServices = _inboxSegment == 'services';
+    final filtered = isServices
+        ? _serviceRequests
+            .where((x) => x['status'] == _serviceRequestFilter)
+            .toList()
+        : _concerns.where((x) => x['status'] == _concernFilter).toList();
+    final openConcerns =
+        _concerns.where((x) => x['status'] == 'open').length;
+    final openServices =
+        _serviceRequests.where((x) => x['status'] == 'open').length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _header(c, 'Concerns & Q&A',
-            '${_concerns.where((x) => x['status'] == 'open').length} open'),
+        _header(c, 'Resident Inbox',
+            '$openConcerns concerns · $openServices service requests'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              _inboxSegmentChip(c, 'concerns', 'Concerns'),
+              const SizedBox(width: 8),
+              _inboxSegmentChip(c, 'services', 'Service Requests'),
+              const Spacer(),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ServiceRequestsInboxScreen(),
+                  ),
+                ),
+                child: const Text('Full inbox'),
+              ),
+            ],
+          ),
+        ),
         // Status filter tabs
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
           child: Row(
-            children: ['open', 'in_review', 'resolved'].map((s) {
-              final active = _concernFilter == s;
+            children: (isServices
+                    ? ['open', 'in_review', 'fulfilled', 'cancelled']
+                    : ['open', 'in_review', 'resolved'])
+                .map((s) {
+              final active = isServices
+                  ? _serviceRequestFilter == s
+                  : _concernFilter == s;
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: GestureDetector(
-                  onTap: () => setState(() => _concernFilter = s),
+                  onTap: () => setState(() {
+                    if (isServices) {
+                      _serviceRequestFilter = s;
+                    } else {
+                      _concernFilter = s;
+                    }
+                  }),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 6),
@@ -898,27 +976,166 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         Expanded(
-          child: _concernsLoading
+          child: (isServices ? _serviceRequestsLoading : _concernsLoading)
               ? _skeletons()
               : filtered.isEmpty
                   ? Center(
-                      child: Text('No $_concernFilter concerns',
-                          style: TextStyle(
-                              color: c.textMuted, fontSize: 14)),
+                      child: Text(
+                        isServices
+                            ? 'No $_serviceRequestFilter service requests'
+                            : 'No $_concernFilter concerns',
+                        style: TextStyle(
+                            color: c.textMuted, fontSize: 14),
+                      ),
                     )
                   : RefreshIndicator(
-                      onRefresh: _loadConcerns,
+                      onRefresh: isServices
+                          ? _loadServiceRequests
+                          : _loadConcerns,
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                         itemCount: filtered.length,
                         separatorBuilder: (_, __) =>
                             const SizedBox(height: 8),
-                        itemBuilder: (ctx, i) =>
-                            _concernCard(c, filtered[i]),
+                        itemBuilder: (ctx, i) => isServices
+                            ? _serviceRequestCard(c, filtered[i])
+                            : _concernCard(c, filtered[i]),
                       ),
                     ),
         ),
       ],
+    );
+  }
+
+  Widget _inboxSegmentChip(
+      AppColorsScheme c, String value, String label) {
+    final active = _inboxSegment == value;
+    return GestureDetector(
+      onTap: () => setState(() => _inboxSegment = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF6366F1) : c.surface1,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: active ? const Color(0xFF6366F1) : c.border),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? Colors.white : c.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _serviceRequestCard(AppColorsScheme c, Map<String, dynamic> row) {
+    final user = row['users'];
+    final submitter = user is Map
+        ? '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'.trim()
+        : 'Resident';
+    final prop = (row['properties'] is Map)
+        ? row['properties']['name']?.toString() ?? ''
+        : '';
+    final ts = _fmtDate(row['created_at']?.toString() ?? '');
+
+    return InkWell(
+      onTap: () => _showServiceRequestDetail(c, row, submitter),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: c.surface1,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: c.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(
+                child: Text(row['service_type']?.toString() ?? '',
+                    style: TextStyle(
+                        color: c.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14)),
+              ),
+              _statusChip(row['status']?.toString() ?? 'open'),
+            ]),
+            const SizedBox(height: 4),
+            Text(row['message']?.toString() ?? '',
+                style: TextStyle(color: c.textSecondary, fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
+            if (row['preferred_date'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('Preferred: ${row['preferred_date']}',
+                    style: TextStyle(color: c.textMuted, fontSize: 11)),
+              ),
+            const SizedBox(height: 6),
+            Text('$submitter${prop.isNotEmpty ? ' · $prop' : ''} · $ts',
+                style: TextStyle(color: c.textMuted, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showServiceRequestDetail(
+      AppColorsScheme c, Map<String, dynamic> row, String submitter) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: c.surface1,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(row['service_type']?.toString() ?? '',
+                style: TextStyle(
+                    color: c.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700)),
+            Text(submitter,
+                style: TextStyle(color: c.textSecondary, fontSize: 12)),
+            const SizedBox(height: 12),
+            Text(row['message']?.toString() ?? '',
+                style: TextStyle(color: c.textPrimary, fontSize: 14)),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              children: [
+                if (row['status'] != 'in_review')
+                  ActionChip(
+                    label: const Text('In Review'),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _updateServiceRequestStatus(
+                          row['id'].toString(), 'in_review');
+                    },
+                  ),
+                if (row['status'] != 'fulfilled')
+                  ActionChip(
+                    label: const Text('Fulfilled'),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _updateServiceRequestStatus(
+                          row['id'].toString(), 'fulfilled');
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1363,6 +1580,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return 'In Review';
       case 'resolved':
         return 'Resolved';
+      case 'fulfilled':
+        return 'Fulfilled';
+      case 'cancelled':
+        return 'Cancelled';
       default:
         return 'Open';
     }

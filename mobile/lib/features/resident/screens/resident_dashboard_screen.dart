@@ -11,7 +11,9 @@ import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../auth/screens/change_password_screen.dart';
+import '../widgets/service_request_sheet.dart';
 import 'resident_comeback_request_screen.dart';
+import 'resident_concerns_screen.dart';
 import 'resident_vacation_hold_screen.dart';
 
 class ResidentDashboardScreen extends StatefulWidget {
@@ -28,7 +30,6 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   String? _loadError;
 
   String _residentName = 'Resident';
-  String _firstName = 'Resident';
   String _email = '';
   String _propertyName = '';
   String _windowShort = '--';
@@ -39,18 +40,15 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   String? _runStatus;
   String? _propertyId;
   Timer? _statusTimer;
-
-  // Community announcements
-  List<Map<String, dynamic>> _announcements = [];
+  Timer? _countdownTimer;
+  dynamic _windowStartRaw;
+  String _countdownLabel = '--';
+  int _violationCount = 0;
+  String _violationLabel = 'None';
 
   // Satisfaction
   int _completedRatingCount = 0;
   bool _satisfactionCardDismissed = false;
-
-  // Messages
-  List<Map<String, dynamic>> _conversations = [];
-  RealtimeChannel? _msgChannel;
-  bool _messagesLoaded = false;
 
   @override
   void initState() {
@@ -60,13 +58,57 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     _statusTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && _propertyId != null) _pollRunStatus();
     });
+    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) _updateCountdown();
+    });
   }
 
   @override
   void dispose() {
     _statusTimer?.cancel();
-    _msgChannel?.unsubscribe();
+    _countdownTimer?.cancel();
     super.dispose();
+  }
+
+  void _updateCountdown() {
+    if (_windowStartRaw == null) return;
+    final parts = _windowStartRaw.toString().split(':');
+    if (parts.length < 2) return;
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    final now = DateTime.now();
+    var target = DateTime(now.year, now.month, now.day, h, m);
+    if (target.isBefore(now)) {
+      target = target.add(const Duration(days: 1));
+    }
+    final diff = target.difference(now);
+    final hours = diff.inHours;
+    final mins = diff.inMinutes % 60;
+    final label = hours > 0 ? '${hours}h ${mins}m' : '${mins}m';
+    if (_countdownLabel != label && mounted) {
+      setState(() => _countdownLabel = label);
+    }
+  }
+
+  String get _nextPickupDateLabel {
+    final now = DateTime.now();
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return '${months[now.month - 1]} ${now.day}, ${now.year}';
+  }
+
+  String get _workerStatusLabel {
+    if (_runStatus == 'in_progress') return 'ON DUTY';
+    if (_runStatus == 'completed') return 'COMPLETED';
+    return 'SCHEDULED';
+  }
+
+  Color get _workerStatusColor {
+    if (_runStatus == 'in_progress') return AppColors.success;
+    if (_runStatus == 'completed') return AppColors.textSecondary;
+    return AppColors.rlvBlue;
   }
 
   Future<void> _pollRunStatus() async {
@@ -137,7 +179,6 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       if (mounted && profile != null) {
         final fn = '${profile['first_name'] ?? ''}'.trim();
         final ln = '${profile['last_name'] ?? ''}'.trim();
-        _firstName = fn.isNotEmpty ? fn : 'Resident';
         if (fn.isNotEmpty || ln.isNotEmpty) {
           _residentName = ('$fn $ln').trim();
         }
@@ -187,21 +228,24 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
 
         final startT = prop['service_window_start'];
         final endT = prop['service_window_end'];
+        _windowStartRaw = startT;
         _windowShort = '${_fmtTime(startT)} – ${_fmtTime(endT)}';
+        _updateCountdown();
       }
 
-      // Load announcements
-      if (_propertyId != null) {
-        try {
-          final anns = await Supabase.instance.client
-              .from('community_announcements')
-              .select()
-              .eq('property_id', _propertyId!)
-              .order('created_at', ascending: false)
-              .limit(5);
-          _announcements = List<Map<String, dynamic>>.from(anns as List);
-        } catch (_) {}
-      }
+      try {
+        final violations = await Supabase.instance.client
+            .from('violations')
+            .select('id')
+            .eq('resident_user_id', uid)
+            .neq('status', 'resolved');
+        _violationCount = (violations as List).length;
+        _violationLabel = _violationCount == 0
+            ? 'None'
+            : _violationCount == 1
+                ? 'Warning'
+                : '$_violationCount active';
+      } catch (_) {}
 
       // Load satisfaction count
       try {
@@ -224,70 +268,8 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     }
   }
 
-  Future<void> _loadMessages() async {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null) return;
-    try {
-      final msgs = await Supabase.instance.client
-          .from('direct_messages')
-          .select('id, sender_id, recipient_id, body, read_at, created_at, sender:users!sender_id(first_name, last_name), recipient:users!recipient_id(first_name, last_name)')
-          .or('sender_id.eq.$uid,recipient_id.eq.$uid')
-          .order('created_at', ascending: false);
-
-      final Map<String, Map<String, dynamic>> convMap = {};
-      for (final m in (msgs as List)) {
-        final isMe = m['sender_id'] == uid;
-        final partnerId = isMe ? m['recipient_id'] : m['sender_id'];
-        final partnerRaw = isMe ? m['recipient'] : m['sender'];
-        final partner = partnerRaw is Map ? partnerRaw : <String, dynamic>{};
-        final partnerName =
-            '${partner['first_name'] ?? ''} ${partner['last_name'] ?? ''}'.trim();
-        if (!convMap.containsKey(partnerId)) {
-          convMap[partnerId] = {
-            'partner_id': partnerId,
-            'partner_name': partnerName.isEmpty ? 'Unknown' : partnerName,
-            'last_message': m['body'],
-            'last_time': m['created_at'],
-            'unread': (!isMe && m['read_at'] == null) ? 1 : 0,
-          };
-        } else if (!isMe && m['read_at'] == null) {
-          convMap[partnerId]!['unread'] =
-              (convMap[partnerId]!['unread'] as int) + 1;
-        }
-      }
-      if (mounted) {
-        setState(() {
-          _conversations = convMap.values.toList();
-          _messagesLoaded = true;
-        });
-      }
-    } catch (_) {}
-  }
-
-  void _subscribeMessages() {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null || _msgChannel != null) return;
-    _msgChannel = Supabase.instance.client
-        .channel('dm_resident_$uid')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          ChannelFilter(
-            event: 'INSERT',
-            schema: 'public',
-            table: 'direct_messages',
-            filter: 'recipient_id=eq.$uid',
-          ),
-          (payload, [ref]) => _loadMessages(),
-        );
-    _msgChannel?.subscribe();
-  }
-
   void _onTabChange(int index) {
     setState(() => _tabIndex = index);
-    if (index == 2 && !_messagesLoaded) {
-      _loadMessages();
-      _subscribeMessages();
-    }
   }
 
   Future<void> _signOut(BuildContext ctx) async {
@@ -317,14 +299,14 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
                   label: 'Home',
                 ),
                 RoleNavItem(
-                  icon: Icons.delete_outline,
-                  activeIcon: Icons.delete,
-                  label: 'Services',
+                  icon: Icons.grid_view_outlined,
+                  activeIcon: Icons.grid_view,
+                  label: 'Extra Services',
                 ),
                 RoleNavItem(
-                  icon: Icons.chat_bubble_outline,
-                  activeIcon: Icons.chat_bubble,
-                  label: 'Messages',
+                  icon: Icons.support_agent_outlined,
+                  activeIcon: Icons.support_agent,
+                  label: 'Support',
                 ),
                 RoleNavItem(
                   icon: Icons.person_outline,
@@ -344,9 +326,9 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       case 0:
         return _buildHomeTab();
       case 1:
-        return _buildServicesTab();
+        return _buildExtraServicesTab();
       case 2:
-        return _buildMessagesTab();
+        return _buildSupportTab();
       default:
         return _buildProfileTab();
     }
@@ -384,182 +366,219 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          _buildGreetingHeader(),
-          const SizedBox(height: 20),
-          _buildServiceBentoRow(),
+          _buildMockHeader(),
+          const SizedBox(height: 16),
+          _buildNextPickupCard(),
           const SizedBox(height: 12),
+          _buildStatTilesRow(),
+          const SizedBox(height: 12),
+          _buildQuickActionsCard(),
+          const SizedBox(height: 20),
+          _buildAvailableServicesSection(),
+          const SizedBox(height: 12),
+          _buildSupportBar(),
+          const SizedBox(height: 8),
           _buildSatisfactionCard(),
-          const SizedBox(height: 12),
-          _buildComebackCard(),
-          const SizedBox(height: 20),
-          _buildCommunityUpdatesSection(),
         ],
       ),
     );
   }
 
-  Widget _buildGreetingHeader() {
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? 'Good morning'
-        : hour < 17
-            ? 'Good afternoon'
-            : 'Good evening';
+  Widget _buildMockHeader() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              greeting,
-              style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
+        CircleAvatar(
+          radius: 22,
+          backgroundColor: AppColors.rlvBlue.withValues(alpha: 0.15),
+          child: Text(
+            _residentName.isNotEmpty
+                ? _residentName[0].toUpperCase()
+                : 'R',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w700,
+              color: AppColors.rlvBlue,
             ),
-            Row(
-              children: [
-                Text(
-                  _propertyName.isEmpty ? _firstName : _propertyName,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                if (_propertyName.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down,
-                      size: 18, color: AppColors.textSecondary),
-                ],
-              ],
-            ),
-          ],
-        ),
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: AppColors.surface1,
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.border),
           ),
-          child: Stack(
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Center(
-                child: Icon(Icons.notifications_outlined,
-                    color: AppColors.textPrimary, size: 22),
+              Text(
+                'Welcome!',
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: AppColors.textSecondary),
+              ),
+              Text(
+                _residentName.toUpperCase(),
+                style: GoogleFonts.montserrat(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ],
           ),
         ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              'Worker Status',
+              style: GoogleFonts.inter(
+                  fontSize: 10, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _workerStatusColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _workerStatusLabel,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _workerStatusColor,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(width: 8),
+        Icon(Icons.notifications_outlined,
+            color: AppColors.rlvBlue, size: 26),
       ],
     );
   }
 
-  Widget _buildServiceBentoRow() {
-    final isCompleted = _runStatus == 'completed';
-    final isInProgress = _runStatus == 'in_progress';
-    final statusColor = isCompleted
-        ? const Color(0xFF30D158)
-        : isInProgress
-            ? AppColors.rlvBlue
-            : AppColors.textSecondary;
-    final statusLabel = isCompleted
-        ? 'Done'
-        : isInProgress
-            ? 'Active'
-            : 'Scheduled';
-    final statusIcon = isCompleted
-        ? Icons.check_circle_outline
-        : isInProgress
-            ? Icons.loop
-            : Icons.schedule_outlined;
-
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: BentoCard(
-            height: 140,
+  Widget _buildNextPickupCard() {
+    return BentoCard(
+      child: Row(
+        children: [
+          Icon(Icons.calendar_today_outlined,
+              color: AppColors.rlvBlue, size: 28),
+          const SizedBox(width: 14),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'NEXT SERVICE',
+                  _nextPickupDateLabel,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _windowShort == '--'
+                      ? 'Service window not set'
+                      : 'Service: $_windowShort',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'Next Pickup',
+                style: GoogleFonts.inter(
+                    fontSize: 11, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _countdownLabel,
+                style: GoogleFonts.montserrat(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.success,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatTilesRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: BentoCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'FREE COMEBACKS',
                   style: GoogleFonts.inter(
                     fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
                     color: AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _windowShort == '--'
-                            ? 'Not set'
-                            : _windowShort.split('–').first.trim(),
-                        style: GoogleFonts.montserrat(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.rlvBlue,
-                          height: 1.0,
-                        ),
-                      ),
-                      if (_windowShort.contains('–'))
-                        Text(
-                          '– ${_windowShort.split('–').last.trim()}',
-                          style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.textSecondary),
-                        ),
-                    ],
+                Text(
+                  '$_freeRemain',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
                   ),
                 ),
-                _buildRunStatusChip(statusColor, statusLabel),
+                Text(
+                  _freeSummary,
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: AppColors.textSecondary),
+                ),
               ],
             ),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          flex: 2,
           child: BentoCard(
-            height: 140,
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'STATUS',
+                  'VIOLATIONS',
                   style: GoogleFonts.inter(
                     fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
                     color: AppColors.textSecondary,
                   ),
                 ),
-                Icon(statusIcon, color: statusColor, size: 32),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isCompleted ? 'Done' : isInProgress ? 'Active' : 'All Clear',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: statusColor,
-                      ),
-                    ),
-                    if (!isCompleted && !isInProgress)
-                      Text(
-                        'No missed\ncollections',
-                        style: GoogleFonts.inter(fontSize: 9, color: AppColors.textSecondary),
-                      ),
-                  ],
+                const SizedBox(height: 8),
+                Text(
+                  '$_violationCount',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  _violationLabel,
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -569,18 +588,184 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     );
   }
 
-  Widget _buildRunStatusChip(Color color, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+  Widget _buildQuickActionsCard() {
+    return BentoCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _quickActionTile(
+            icon: Icons.event_outlined,
+            title: 'Request Pickup',
+            subtitle: _freeRemain > 0
+                ? 'Free ($_freeRemain left) • \$${_comebackFee.toStringAsFixed(0)} after limit'
+                : 'Paid comeback • \$${_comebackFee.toStringAsFixed(0)}',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ResidentComebackRequestScreen(
+                  freeRemain: _freeRemain,
+                  comebackFee: _comebackFee,
+                ),
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.border),
+          _quickActionTile(
+            icon: Icons.history,
+            title: 'Service History',
+            subtitle: 'View past pickups',
+            onTap: () => setState(() => _tabIndex = 1),
+          ),
+          const Divider(height: 1, color: AppColors.border),
+          _quickActionTile(
+            icon: Icons.shopping_cart_outlined,
+            title: 'Buy Extra Pickups',
+            subtitle: 'Purchase pickups',
+            onTap: () => setState(() => _tabIndex = 1),
+          ),
+        ],
       ),
-      child: Text(
-        label,
-        style: GoogleFonts.inter(
-            fontSize: 11, fontWeight: FontWeight.w600, color: color),
+    );
+  }
+
+  Widget _quickActionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.success, size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right,
+                color: AppColors.textSecondary, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvailableServicesSection() {
+    const services = [
+      (Icons.local_shipping_outlined, 'Moving Service', 'Moving Service'),
+      (Icons.cleaning_services_outlined, 'Maid Service', 'Maid Service'),
+      (Icons.delete_outline, 'Bulk Trash Pickup', 'Bulk Trash Pickup'),
+      (Icons.more_horiz, 'More Services', 'Other'),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Available Services',
+          style: GoogleFonts.montserrat(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.35,
+          children: services.map((s) {
+            return InkWell(
+              onTap: () => showServiceRequestSheet(
+                context,
+                initialServiceType: s.$3,
+                propertyId: _propertyId,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface1,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(s.$1, color: AppColors.success, size: 28),
+                    const SizedBox(height: 8),
+                    Text(
+                      s.$2,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSupportBar() {
+    return BentoCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.headset_mic_outlined,
+              color: AppColors.rlvBlue, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "Questions or Concerns? We're here to help",
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => setState(() => _tabIndex = 2),
+            style: TextButton.styleFrom(
+              backgroundColor: AppColors.success,
+              foregroundColor: Colors.white,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text(
+              'Message',
+              style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -643,50 +828,6 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             child: const Icon(Icons.close,
                 size: 16, color: AppColors.textSecondary),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildComebackCard() {
-    if (_propertyId == null) return const SizedBox.shrink();
-    return BentoCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ResidentComebackRequestScreen(
-            freeRemain: _freeRemain,
-            comebackFee: _comebackFee,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.refresh_outlined,
-              color: AppColors.rlvBlue, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Request a Comeback',
-                  style: GoogleFonts.montserrat(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary),
-                ),
-                Text(
-                  _freeSummary,
-                  style: GoogleFonts.inter(
-                      fontSize: 11, color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right,
-              color: AppColors.textSecondary, size: 20),
         ],
       ),
     );
@@ -793,215 +934,93 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     } catch (_) {}
   }
 
-  Widget _buildCommunityUpdatesSection() {
+  // ── Extra Services Tab ────────────────────────────────────────────────────────
+
+  Widget _buildExtraServicesTab() {
+    const services = [
+      (Icons.local_shipping_outlined, 'Moving Service', 'Moving Service'),
+      (Icons.cleaning_services_outlined, 'Maid Service', 'Maid Service'),
+      (Icons.delete_outline, 'Bulk Trash Pickup', 'Bulk Trash Pickup'),
+      (Icons.chair_outlined, 'Carpet Cleaning', 'Carpet Cleaning'),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'COMMUNITY UPDATES',
-          style: GoogleFonts.inter(
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.2,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_announcements.isEmpty)
-          BentoCard(
-            child: Center(
-              child: Text(
-                'No updates yet',
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.textSecondary),
-              ),
-            ),
-          )
-        else
-          ..._announcements.map((a) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: BentoCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        a['title'] ?? '',
-                        style: GoogleFonts.montserrat(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        a['body'] ?? '',
-                        style: GoogleFonts.inter(
-                            fontSize: 13, color: AppColors.textSecondary),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _timeAgo(a['created_at']),
-                        style: GoogleFonts.inter(
-                            fontSize: 10, color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-              )),
-      ],
-    );
-  }
-
-  String _timeAgo(String? iso) {
-    if (iso == null) return '';
-    final dt = DateTime.tryParse(iso)?.toLocal();
-    if (dt == null) return '';
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
-  // ── Services Tab ──────────────────────────────────────────────────────────────
-
-  Widget _buildServicesTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionHeader('Services'),
+        _sectionHeader('Extra Services'),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            children: const [ResidentPickupHistoryView()],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Messages Tab ──────────────────────────────────────────────────────────────
-
-  Widget _buildMessagesTab() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Messages',
-                style: GoogleFonts.montserrat(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary),
+                'Tap a service to submit a request with your preferred date.',
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: AppColors.textSecondary),
               ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: !_messagesLoaded
-              ? const Center(
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.rlvBlue))
-              : _conversations.isEmpty
-                  ? Center(
+              const SizedBox(height: 16),
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.2,
+                children: services.map((s) {
+                  return InkWell(
+                    onTap: () => showServiceRequestSheet(
+                      context,
+                      initialServiceType: s.$3,
+                      propertyId: _propertyId,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface1,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border),
+                      ),
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.chat_bubble_outline,
-                              size: 48, color: AppColors.textSecondary),
-                          const SizedBox(height: 12),
+                          Icon(s.$1, color: AppColors.success, size: 32),
+                          const SizedBox(height: 8),
                           Text(
-                            'No messages yet',
+                            s.$2,
+                            textAlign: TextAlign.center,
                             style: GoogleFonts.inter(
-                                fontSize: 14,
-                                color: AppColors.textSecondary),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                         ],
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadMessages,
-                      color: AppColors.rlvBlue,
-                      backgroundColor: AppColors.surface1,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: _conversations.length,
-                        separatorBuilder: (context, index) =>
-                            const Divider(color: AppColors.border, height: 1),
-                        itemBuilder: (_, i) {
-                          final c = _conversations[i];
-                          final name = c['partner_name'] as String? ?? '?';
-                          final initial =
-                              name.isNotEmpty ? name[0].toUpperCase() : '?';
-                          final unread = c['unread'] as int? ?? 0;
-                          return ListTile(
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 8),
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.rlvBlue
-                                  .withValues(alpha: 0.15),
-                              child: Text(
-                                initial,
-                                style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.rlvBlue),
-                              ),
-                            ),
-                            title: Text(
-                              name,
-                              style: GoogleFonts.montserrat(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary),
-                            ),
-                            subtitle: Text(
-                              c['last_message'] ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary),
-                            ),
-                            trailing: unread > 0
-                                ? Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: const BoxDecoration(
-                                        color: AppColors.rlvBlue,
-                                        shape: BoxShape.circle),
-                                    child: Center(
-                                      child: Text(
-                                        '$unread',
-                                        style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: Colors.white),
-                                      ),
-                                    ),
-                                  )
-                                : null,
-                            onTap: () => _openConversation(
-                                c['partner_id'], name),
-                          );
-                        },
-                      ),
                     ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'SERVICE HISTORY',
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const ResidentPickupHistoryView(),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Future<void> _openConversation(String? partnerId, String partnerName) async {
-    if (partnerId == null) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _ConversationScreen(
-            partnerId: partnerId, partnerName: partnerName),
-      ),
-    );
-    _loadMessages();
+  // ── Support Tab ───────────────────────────────────────────────────────────────
+
+  Widget _buildSupportTab() {
+    return const ResidentSupportPanel();
   }
 
   // ── Profile Tab ──────────────────────────────────────────────────────────────
@@ -1181,213 +1200,6 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
           fontWeight: FontWeight.w800,
           color: AppColors.textPrimary,
         ),
-      ),
-    );
-  }
-}
-
-// ── Conversation Screen ───────────────────────────────────────────────────────
-
-class _ConversationScreen extends StatefulWidget {
-  final String partnerId;
-  final String partnerName;
-
-  const _ConversationScreen({
-    required this.partnerId,
-    required this.partnerName,
-  });
-
-  @override
-  State<_ConversationScreen> createState() => _ConversationScreenState();
-}
-
-class _ConversationScreenState extends State<_ConversationScreen> {
-  final _ctrl = TextEditingController();
-  List<Map<String, dynamic>> _messages = [];
-  RealtimeChannel? _channel;
-  bool _sending = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-    _subscribe();
-  }
-
-  @override
-  void dispose() {
-    _channel?.unsubscribe();
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null) return;
-    try {
-      final msgs = await Supabase.instance.client
-          .from('direct_messages')
-          .select()
-          .or('and(sender_id.eq.$uid,recipient_id.eq.${widget.partnerId}),and(sender_id.eq.${widget.partnerId},recipient_id.eq.$uid)')
-          .order('created_at');
-      // Mark received as read
-      await Supabase.instance.client
-          .from('direct_messages')
-          .update({'read_at': DateTime.now().toIso8601String()})
-          .eq('sender_id', widget.partnerId)
-          .eq('recipient_id', uid)
-          .filter('read_at', 'is', 'null');
-      if (mounted) {
-        setState(
-            () => _messages = List<Map<String, dynamic>>.from(msgs as List));
-      }
-    } catch (_) {}
-  }
-
-  void _subscribe() {
-    _channel = Supabase.instance.client
-        .channel('conv_${widget.partnerId}')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          ChannelFilter(
-              event: 'INSERT', schema: 'public', table: 'direct_messages'),
-          (payload, [ref]) => _load(),
-        );
-    _channel?.subscribe();
-  }
-
-  Future<void> _send() async {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    final text = _ctrl.text.trim();
-    if (uid == null || text.isEmpty || _sending) return;
-    setState(() => _sending = true);
-    try {
-      await Supabase.instance.client.from('direct_messages').insert({
-        'sender_id': uid,
-        'recipient_id': widget.partnerId,
-        'body': text,
-      });
-      _ctrl.clear();
-      await _load();
-    } catch (_) {}
-    if (mounted) setState(() => _sending = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface1,
-        elevation: 0,
-        title: Text(
-          widget.partnerName,
-          style: GoogleFonts.montserrat(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary),
-        ),
-        iconTheme: const IconThemeData(color: AppColors.textPrimary),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? Center(
-                    child: Text(
-                      'Start a conversation',
-                      style: GoogleFonts.inter(
-                          fontSize: 14, color: AppColors.textSecondary),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (_, i) {
-                      final m = _messages[i];
-                      final isMe = m['sender_id'] == uid;
-                      return Align(
-                        alignment: isMe
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          constraints: BoxConstraints(
-                              maxWidth:
-                                  MediaQuery.of(context).size.width * 0.72),
-                          decoration: BoxDecoration(
-                            color: isMe
-                                ? AppColors.rlvBlue
-                                : AppColors.surface1,
-                            borderRadius: BorderRadius.circular(16),
-                            border: isMe
-                                ? null
-                                : Border.all(color: AppColors.border),
-                          ),
-                          child: Text(
-                            m['body'] ?? '',
-                            style: GoogleFonts.inter(
-                                fontSize: 14,
-                                color: isMe
-                                    ? Colors.white
-                                    : AppColors.textPrimary),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          Container(
-            padding: EdgeInsets.fromLTRB(
-                16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-            color: AppColors.surface1,
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _ctrl,
-                    style: GoogleFonts.inter(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: 'Message...',
-                      hintStyle: GoogleFonts.inter(
-                          color: AppColors.textSecondary),
-                      filled: true,
-                      fillColor: AppColors.background,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _send,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                        color: AppColors.rlvBlue, shape: BoxShape.circle),
-                    child: _sending
-                        ? const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white),
-                          )
-                        : const Icon(Icons.send,
-                            color: Colors.white, size: 20),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

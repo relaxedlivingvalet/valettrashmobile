@@ -1,15 +1,18 @@
 # Current State
 
 ## Current Objective
-**All 5 dashboards pixel-aligned to RLV brand mockup.** Every overview screen now matches the mockup layout, stats, labels, and color palette exactly. `flutter analyze` — 0 errors, 0 actionable warnings. Native Android/iOS configured. Waiting on Apple Developer account before iOS submission.
+**Store-ready with resident mock layout + service request workflow.** Final RLV icon installed. Resident home matches client mock (pickup card, stats, quick actions, services grid, support bar). Extra-service requests persist to `service_requests` and appear on **owner** and **super_admin** inboxes. Apply migration `007_service_requests.sql` in Supabase before testing requests in production.
 
 ## Run the App
 ```powershell
-cd C:\Users\e159305\Projects\valettrashmobile\mobile
-& "C:\Users\e159305\Apps\flutter\bin\flutter.bat" run -d web-server --web-port 8091 --no-pub
+cd C:\Users\WeLovePQ\Desktop\CascadeProjects\windsurf-project\mobile
+flutter pub get
+flutter run -d web-server --web-port 8091 --no-pub
 # or
-& "C:\Users\e159305\Apps\flutter\bin\flutter.bat" run -d chrome --no-pub
+flutter run -d chrome --no-pub
 ```
+
+App: **http://localhost:8091**
 
 ---
 
@@ -23,18 +26,20 @@ cd C:\Users\e159305\Projects\valettrashmobile\mobile
 | Site URL | `http://localhost:8091` |
 | Redirect URLs | `http://localhost:8091`, `com.relaxedliving.valet://login-callback` |
 
-- All tables migrated, RLS enabled, SECURITY DEFINER RPCs in place
+- All core tables migrated, RLS enabled, SECURITY DEFINER RPCs in place
+- **`service_requests`** — migration file `007_service_requests.sql` (must be applied manually in Supabase SQL editor if not yet run)
+- **`resident_concerns`** — support/Q&A messages from residents (Support tab)
 - `violations` storage bucket with RLS policies
 - Seed data: property `10000000-0000-0000-0000-000000000001` (Sunset Gardens), unit 104, invite code `WELCOME104`
 - Email confirmation **disabled** — re-enable when a real email provider is configured
+- **No email on service submit** — dashboard inbox only (owner + admin)
 
 ---
 
 ## Flutter App (`mobile/`)
 
-- **Package name**: `valet` (renamed from `mobile` in session 10)
-- **Flutter SDK**: `C:\Users\e159305\Apps\flutter\bin` (Flutter 3.41.9)
-- **Entry**: `main.dart` → `ValetApp` → `AuthGate` → `RoleHome` switch → role dashboard
+- **Package name**: `valet`
+- **Entry**: `main.dart` → `ValetApp` → `AuthGate` → `RoleHome` → role dashboard
 
 ### Role → Screen Routing
 
@@ -47,80 +52,67 @@ cd C:\Users\e159305\Projects\valettrashmobile\mobile
 | `owner` | `OwnerDashboardScreen` | Light |
 | `super_admin` | `AdminDashboardScreen` | Light |
 
-### Auth Flow
-- `AuthGate` (StreamBuilder on `onAuthStateChange`) intercepts `passwordRecovery` event → shows `ChangePasswordScreen(isRecovery: true)`
-- Login screen has "Forgot password?" link (below password field, login mode only)
-- All dashboards have a "Change Password" button in profile/settings tab
-- `Supabase.initialize()` has `authCallbackUrlHostname: 'login-callback'` for mobile deep links
+### Resident Dashboard (May 2026)
+
+**Bottom nav:** Home | Extra Services | Support | Profile (Messages tab removed)
+
+**Home tab:** mock-aligned layout using existing `AppColors` (dark + `rlvBlue` / `success` accents):
+- Welcome + worker status + notifications icon
+- Next pickup card (date, service window, countdown to window start)
+- Free comebacks / violations stat tiles (live from Supabase)
+- Quick actions: Request Pickup → `ResidentComebackRequestScreen`, Service History / Buy Extras → Extra Services tab
+- Available services 2×2 grid → `showServiceRequestSheet()`
+- Support bar → Support tab
+
+**Extra Services tab:** service grid + `ResidentPickupHistoryView`
+
+**Support tab:** `ResidentSupportPanel` — topic dropdown + message → `resident_concerns`
+
+**Service requests:** `lib/features/resident/widgets/service_request_sheet.dart` — dropdown, date picker, message → `service_requests`
+
+### Owner / Admin Inboxes
+
+| Role | Where | What |
+|---|---|---|
+| `super_admin` | Admin → **Resident Inbox** tab | Segments: **Concerns** \| **Service Requests**; status filters; full inbox link |
+| `owner` | Owner → More → **Service Requests Inbox** | `ServiceRequestsInboxScreen` — mark in review / fulfilled / cancelled |
+
+Shared screen: `lib/features/shared/screens/service_requests_inbox_screen.dart`
 
 ### Design System
-- Tokens: `core/theme/app_colors.dart` — background, surface1/2, border, textPrimary/Secondary/Muted
-- Role accents: resident=emerald, worker=amber, manager=indigo, owner=purple, admin=info
-- Shared widgets: `GlowBadge`, `StatTile`, `SkeletonCard`, `RoleHeroCard`, `PrimaryButton`, `RoleBottomNav`
-- Animations: `SharedAxisPageRoute` (`core/utils/page_transitions.dart`), Lottie success/error
+- Tokens: `core/theme/app_colors.dart` — dark surfaces, `rlvBlue` brand, semantic success/warning/error
+- Shared widgets: `BentoCard`, `MetricTile`, `GlowBadge`, `PrimaryButton`, `RoleBottomNav`, Lottie feedback
 
-### Key Technical Gotchas
-- Supabase v1 filter: `.filter('col', 'in', '(${ids.join(',')})')` — not `.inFilter()`
-- `Future.wait(<Future<dynamic>>[...])` — typed generic required for Flutter web
-- `GlowBadge` requires `accent` (required) and `showDot` (optional, default true)
-- `supabase.auth.updateUser()` not `.update()` (gotrue-1.12.6 API)
-- Password reset on mobile passes `redirectTo: 'com.relaxedliving.valet://login-callback'`; web passes `null`
+### Auth Flow
+- Password recovery → `ChangePasswordScreen`; mobile deep link `com.relaxedliving.valet://login-callback`
+- `supabase_flutter` v1.10.25 — use `.filter()` not `.inFilter()`; `auth.updateUser()` not `.update()`
 
 ---
 
 ## Native Platform (Android + iOS)
 
-Generated in session 10. Both platforms use bundle ID `com.relaxedliving.valet`.
-
-### Android
-- `applicationId`: `com.relaxedliving.valet`
-- `minSdk`: 21
-- Permissions: INTERNET, CAMERA, READ_MEDIA_IMAGES, READ/WRITE_EXTERNAL_STORAGE, ACCESS_FINE/COARSE_LOCATION
-- Release signing: `android/upload-keystore.jks` + `android/key.properties` (password: `RLValet2026!Key`)
-- R8 minification + resource shrinking enabled in release builds
-- Deep link intent filter: `com.relaxedliving.valet://login-callback`
-
-### iOS
-- Bundle ID set via Xcode (`PRODUCT_BUNDLE_IDENTIFIER` = `com.relaxedliving.valet`)
-- Display name: "Relaxed Living Valet"
-- Privacy strings: Camera, Photo Library (read + add), Location when in use
-- URL scheme: `com.relaxedliving.valet` (for deep links)
-- Portrait-only on phones; all orientations on iPad
-- **iOS builds require macOS + Xcode + Apple Developer account**
-
-### App Icon & Splash
-- Final icon at `mobile/assets/icon/app_icon.png` — RLV logo (black bg, white/blue lettering, blue border glow)
-- Adaptive icon background: `#000000` (matches icon)
-- Regenerated with `flutter pub run flutter_launcher_icons` (Android standard + adaptive, iOS)
-- Splash uses same logo on dark `#0A0C0F` background; regenerated with `flutter pub run flutter_native_splash:create`
+- Bundle ID: `com.relaxedliving.valet`
+- Android release signing configured (`upload-keystore.jks` + `key.properties`, repo private)
+- Final RLV icon + splash regenerated
+- **iOS:** requires Mac + Xcode + Apple Developer account
 
 ---
 
 ## Test Accounts
-Full list in `brain/test_credentials.md`. Quick reference:
+
+See `brain/test_credentials.md`. Quick reference:
 
 | Email | Password | Role |
 |---|---|---|
 | `relaxedlivingtx@gmail.com` | `RelaxedLiving2026!` | `super_admin` |
-| `adam.grant824+om@gmail.com` | `TestPass123!` | `operations_manager` |
-| `adam.grant824+worker@gmail.com` | `TestPass123!` | `driver` |
-| `adam.grant824+pm@gmail.com` | `TestPass123!` | `property_manager` |
 | `adam.grant824+res2@gmail.com` | `TestPass123!` | `resident` (unit 104) |
 
 ---
 
 ## Known Issues / Constraints
-- `supabase_flutter` pinned at v1.10.25 — v2 upgrade blocked by missing transitive deps in this environment; try on a machine with full internet access
-- `.env` is committed (anon key only — publishable, safe to expose in client code)
-- `android/upload-keystore.jks` and `android/key.properties` are committed — repo is private
-- `withOpacity` deprecation warnings (info only, not errors) — use `.withValues(alpha: ...)` to silence
-- `PmComplianceReportScreen` uses `dart:html` for CSV export — web only; will need `dart:io` path for native builds
-- Worker location sharing uses `dart:html` geolocation — web only; needs `geolocator` package for native
-- `simple_auth_screen.dart`: 2× `signInWithIdToken is experimental` — Supabase-controlled API, not fixable on our end; all other warnings resolved
 
-### Shared Widgets Added (Session 12)
-- `lib/core/widgets/bento_card.dart` — dark card used across all 5 dashboards
-- `lib/core/widgets/metric_tile.dart` — metric display widget
-
-### Session 13 additions
-- `resident_dashboard_screen.dart` — `_buildComebackCard()` added to Home tab; loads `comeback_pickup_fee` from property settings; navigates to `ResidentComebackRequestScreen` with `freeRemain` + `comebackFee` params
+- **Apply `007_service_requests.sql`** before service request submit works against hosted Supabase
+- `supabase_flutter` v1 → v2 upgrade deferred (network/deps)
+- `PmComplianceReportScreen` / worker map: `dart:html` on web only — need native helpers for store builds
+- Direct messages UI removed from resident nav; `direct_messages` table still exists if re-enabled later
+- Stripe paid comebacks not wired

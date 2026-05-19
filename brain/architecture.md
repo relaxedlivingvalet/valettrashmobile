@@ -13,7 +13,10 @@ valettrashmobile/
 │       ├── valet_app.dart         # MaterialApp + AuthGate + RoleHome
 │       └── features/
 │           ├── auth/screens/      # SimpleAuthScreen, ResidentSignupScreen
-│           ├── resident/screens/  # ResidentDashboardScreen
+│           ├── resident/
+│           │   ├── screens/       # ResidentDashboardScreen, concerns, comeback, etc.
+│           │   └── widgets/       # service_request_sheet.dart
+│           ├── shared/screens/    # service_requests_inbox_screen.dart (owner + admin)
 │           ├── worker/screens/    # WorkerDashboardScreen, ViolationReportScreen
 │           ├── manager/screens/   # PropertyManagerDashboardNewScreen, SimpleNotificationSenderScreen
 │           ├── owner/screens/     # OwnerDashboardScreen
@@ -29,7 +32,8 @@ valettrashmobile/
 
 - `valet_app.dart` — root widget; `AuthGate` listens to Supabase auth stream; `RoleHome` fetches `users.role` and routes to the correct dashboard
 - `features/auth/` — sign-in + resident sign-up flow (invite code verification → account creation → claim invite)
-- `features/resident/` — resident's pickup status, service window countdown, notifications
+- `features/resident/` — mock-aligned home, extra-service request sheet, support/concerns panel, comeback flow
+- `features/shared/` — service request inbox for owner and super_admin fulfillment
 - `features/worker/` — driver route list, pickup marking, violation report with `image_picker` + Supabase Storage upload
 - `features/manager/` — property manager dashboard + notification sender
 - `features/owner/` — super admin dashboard
@@ -58,6 +62,8 @@ valettrashmobile/
 | `notifications` | Targeted (by `user_id`) or broadcast (by `property_id`) |
 | `routes` / `worker_assignments` | Route scheduling and driver assignment |
 | `subscriptions` / `invoices` | Billing (Stripe integration target) |
+| `resident_concerns` | Support messages from residents (Support tab) |
+| `service_requests` | Extra-service requests (Moving, Maid, Bulk, etc.) — migration `007` |
 
 ## External Integrations
 - **Supabase** — auth, database, storage, edge functions

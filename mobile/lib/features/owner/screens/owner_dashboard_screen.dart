@@ -13,6 +13,7 @@ import '../../manager/screens/manager_dashboard_screen.dart';
 import '../../manager/screens/property_manager_dashboard_new.dart';
 import '../../manager/screens/simple_notification_sender_screen.dart';
 import '../../resident/screens/resident_dashboard_screen.dart';
+import '../../shared/screens/service_requests_inbox_screen.dart';
 import '../../worker/screens/worker_dashboard_screen.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
@@ -909,6 +910,20 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       showDot: false,
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              const _OwnerSectionLabel(text: 'RESIDENT REQUESTS'),
+              const SizedBox(height: 12),
+              _buildRoleSwitchCard(
+                label: 'Service Requests Inbox',
+                icon: Icons.inbox_outlined,
+                color: AppColors.owner,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ServiceRequestsInboxScreen(),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),

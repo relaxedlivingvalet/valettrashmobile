@@ -12,6 +12,7 @@
   flutter build appbundle
   ```
   Upload the `.aab` to Google Play Console
+- [ ] **Apply migration** `supabase/migrations/007_service_requests.sql` in Supabase SQL editor (required for extra-service request flow)
 - [ ] **Production Supabase config** — when deploying to a real domain:
   - Update Site URL from `http://localhost:8091` to `https://yourdomain.com`
   - Add `https://yourdomain.com` to Redirect URLs
@@ -55,3 +56,4 @@ All prior work is complete and documented in `brain/change_log.md`. Summary:
 | 11 | Owner handoff README rewrite, keystore committed |
 | 12 | Full dashboard rebuild — RLV brand spec, BentoCard system, fl_chart, realtime DMs |
 | 13 | Brand mockup pixel-alignment (all 5 dashboards), comeback card restored, lint cleanup |
+| 14 | Resident mock home layout, Support nav, `service_requests` + owner/admin inboxes |
