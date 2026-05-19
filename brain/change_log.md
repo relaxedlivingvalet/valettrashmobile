@@ -5,14 +5,18 @@ Date | Change | Files Modified | Reason
 
 ---
 
-### 2026-05-19 — Unify owner and super_admin login
+### 2026-05-19 — Brain refresh + GitHub push note (`eb29777` stack)
+
+- Documented owner login, migrations 012–013, workforce QA, recent commits on `main`
+
+### 2026-05-19 — Unify owner and super_admin login (`eb29777`)
 
 - **`owner` and `super_admin`** both route to **Owner dashboard**; Admin Portal from More
 - **Owner login:** `relaxedlivingtx@gmail.com` / `RelaxedLiving2026!` (Staff sign-in)
 - Optional alias `relaxedlivingtx+owner@gmail.com`; migration `013_unify_owner_role.sql`
 - `RoleTheme.fromString('owner')` fix; admin role picker includes `owner`
 
-### 2026-05-19 — Workforce: OM timecards + owner labor estimates
+### 2026-05-19 — Workforce: OM timecards + owner labor estimates (`401b13e`)
 
 - **`ClockHours`** helper — shift pairing, week/month hour totals, labor cost
 - **`OmWorkforceScreen`** — OM Routes/More: on-duty, GPS sharing, shift history per worker

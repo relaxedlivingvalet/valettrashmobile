@@ -18,14 +18,17 @@ Relaxed Living Valet is a production mobile app for valet trash service at apart
 | Resident | `resident` | ResidentDashboardScreen |
 | Driver/Porter | `driver` | WorkerDashboardScreen |
 | Property Manager | `property_manager` | PropertyManagerDashboardNewScreen |
-| Owner | `owner` | OwnerDashboardScreen |
-| Super Admin | `super_admin` | AdminDashboardScreen |
+| Operations Manager | `operations_manager` | ManagerDashboardScreen |
+| Business owner | `owner` or `super_admin` | OwnerDashboardScreen (same); Admin Portal from More |
+
+Test logins: `brain/test_credentials.md`
 
 ## Primary Goals
 - Residents sign up via invite code + unit number, then track their service
-- Drivers see and execute nightly pickup routes; report violations with photos
-- Property managers view completion rates and violation history per property
-- Super admin manages the entire platform
+- Drivers see and execute nightly pickup routes; clock in/out; report violations with photos
+- Property managers view occupancy, billing, and compliance per property
+- Operations managers run nightly ops (routes, workforce timecards, live map)
+- Owner views portfolio financials, labor cost, and opens Admin Portal for platform setup
 
 ## Constraints
 - Single codebase Flutter app — role routing in `AuthGate → RoleHome` at startup

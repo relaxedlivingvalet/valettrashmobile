@@ -41,6 +41,8 @@
 - [x] **Commit & push** staff invites — `2a996f7` on `main` (May 19, 2026)
 - [x] **Commit & push** owner financials + PM billing + invite playbook — `b41ae6a` on `main` (May 19, 2026)
 - [x] **Commit & push** billing door counts UI — `48ec1cf` on `main` (May 19, 2026)
+- [x] **Commit & push** workforce + owner labor — `401b13e` on `main` (May 19, 2026)
+- [x] **Commit & push** unify owner login — `eb29777` on `main` (May 19, 2026)
 
 ---
 

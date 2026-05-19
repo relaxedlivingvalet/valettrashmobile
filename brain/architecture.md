@@ -19,8 +19,9 @@ valettrashmobile/
 │           │   └── models/        # comeback_pricing.dart (packs + monthly free constant)
 │           ├── shared/screens/    # service_requests_inbox_screen.dart (owner + admin)
 │           ├── worker/screens/    # WorkerDashboardScreen, ViolationReportScreen
-│           ├── manager/screens/   # PropertyManagerDashboardNewScreen, SimpleNotificationSenderScreen
-│           ├── owner/screens/     # OwnerDashboardScreen
+│           ├── manager/screens/   # PM dashboard, OM dashboard, OmWorkforceScreen, OmWorkerMapScreen
+│           ├── owner/screens/     # OwnerDashboardScreen, OwnerWorkforceScreen
+│           ├── admin/screens/     # AdminDashboardScreen (from Owner → More)
 │           └── test/screens/      # TestConnectionScreen
 ├── supabase/
 │   ├── migrations/                # SQL migrations (apply in order — see MIGRATIONS.md)
@@ -34,10 +35,12 @@ valettrashmobile/
 - `valet_app.dart` — root widget; `AuthGate` listens to Supabase auth stream; `RoleHome` fetches `users.role` and routes to the correct dashboard
 - `features/auth/` — sign-in + resident sign-up flow (invite code verification → account creation → claim invite)
 - `features/resident/` — mock-aligned home (`IndexedStack` tabs), comeback tiers (free monthly / banked / paid), `clock_events` worker badge, extra-service sheet (date+time), buy pickup packs
-- `features/shared/` — service request inbox for owner and super_admin fulfillment
-- `features/worker/` — driver route list, pickup marking, violation report with `image_picker` + Supabase Storage upload
-- `features/manager/` — property manager dashboard + notification sender
-- `features/owner/` — super admin dashboard
+- `features/shared/` — service request inbox for owner fulfillment
+- `features/worker/` — driver route, clock_events, worker_locations, earnings
+- `features/manager/` — PM + OM dashboards, workforce timecards, live worker map
+- `features/owner/` — portfolio financials, labor estimates, link to admin portal
+- `features/admin/` — users, properties, invite codes, billing rates (opened from owner)
+- `core/workforce/clock_hours.dart` — shared shift/hour/labor math
 
 ## Entry Points
 - `mobile/lib/main.dart` — production entry

@@ -1,13 +1,13 @@
 # Current State
 
 ## Current Objective
-**Owner/PM financial & onboarding QA** — billing by total/occupied doors + auto-calculated billable/monthly $. Live Supabase migrations through **011**. Flutter web on port **8091**.
+**Owner login + workforce + billing QA** — unified owner login, OM timecards, owner labor $, door-count billing. Repo migrations through **013**; apply **012** and **013** on hosted Supabase if not yet run. Flutter web on port **8091**.
 
 ## Resume Here (next session)
-1. **Apply migration `012_workforce_labor.sql`** on Supabase (hourly_rate, clock_events RLS, `set_worker_hourly_rate` RPC).
-2. **OM** → Routes or More → **Workforce & Timecards** — verify clock in/out + on-duty badges.
-3. **Owner** → Financials → **Labor (from clock)** + **Manage rates** — set driver $/hr, compare to payouts.
-4. **Stripe Connect** — wire webhooks so payouts/MRR populate from live Stripe.
+1. **Owner login** — Staff → `relaxedlivingtx@gmail.com` / `RelaxedLiving2026!` → Owner dashboard (see `brain/test_credentials.md`). Run `013_unify_owner_role.sql` if role still `super_admin` only.
+2. **Apply migrations `012` + `013`** on Supabase (labor rates + owner role).
+3. **OM** → **Workforce & Timecards**; **Owner** → Financials → **Manage rates**.
+4. **Stripe Connect** — webhooks for payouts/MRR.
 5. Blockers: RLS on ~19 tables, Stripe checkout for paid comebacks, iOS signing.
 
 ## Run the App
@@ -39,9 +39,10 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | `property_billing_metrics` | `010_property_billing_metrics.sql` | `monthly_fee_per_door` (default $25), `minimum_billable_occupancy_percent` (default 0.85) |
 | `property_door_counts` | `011_property_door_counts.sql` | `billing_total_doors`, `billing_occupied_doors` (manual entry per complex) |
 | `workforce_labor` | `012_workforce_labor.sql` | `users.hourly_rate`, clock_events/worker_locations RLS, `set_worker_hourly_rate` RPC |
+| `unify_owner_role` | `013_unify_owner_role.sql` | `relaxedlivingtx@gmail.com` → `owner`; optional `+owner` alias |
 
 ### Billing rules (app + DB)
-- **Inputs (super admin):** total doors, occupied doors, $/billable door/month on **Property Billing Rates**.
+- **Inputs (owner via Admin Portal):** total doors, occupied doors, $/billable door/month on **Property Billing Rates**.
 - **Billable doors** = `max(occupied, ceil(total × 85%))` — app calculates occupancy % and monthly $.
 - Falls back to counted units + `resident_units` when door counts not saved yet.
 - **PM contract estimate** = billable doors × `monthly_fee_per_door`.
@@ -63,6 +64,8 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 
 ### Auth / routing
 - Login: **Resident** | **Staff** buttons.
+- **`owner` ≡ `super_admin`** — both → `OwnerDashboardScreen`; **Admin Portal** from More.
+- **Owner test login:** `relaxedlivingtx@gmail.com` / `RelaxedLiving2026!` (Staff).
 - `RoleHome` polls `fetchUserRole()` after signup (fixes PM landing as resident race).
 - Staff: `staff_invites` + `register_staff_with_invite`.
 
@@ -80,16 +83,17 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | Overview | Portfolio summary |
 | **Financials** | Contract revenue, **labor est from clock**, revenue/door, MRR, payouts, **Manage rates** → `OwnerWorkforceScreen`, **Export CSV** |
 | Reports | Properties with occupancy + billable + $/door |
-| More | Service requests inbox, role switchers |
+| More | **Admin Portal**, service requests inbox, role switchers (preview other dashboards) |
 
-### Super admin onboarding
+### Owner onboarding (Admin Portal via More)
 | Task | Where |
 |---|---|
-| Add property | Properties → Add / Tools → Add Property |
-| Units + resident codes | Tools → **Resident Invite Codes** (see `brain/resident_invite_workflow.md`) |
-| Staff codes | Tools → **Staff Invite Codes** |
-| Link PM/OM/driver | Manager / Worker Assignments |
-| **Door counts + $/door** | Tools → **Property Billing Rates** (total, occupied, rate → auto billable) |
+| Add property | Admin → Properties → Add |
+| Units + resident codes | Admin → Tools → **Resident Invite Codes** (`brain/resident_invite_workflow.md`) |
+| Staff codes | Admin → Tools → **Staff Invite Codes** |
+| Link PM/OM/driver | Admin → Manager / Worker Assignments |
+| **Door counts + $/door** | Admin → Tools → **Property Billing Rates** |
+| **Driver pay rates** | Owner → Financials → **Manage rates** (or `OwnerWorkforceScreen`) |
 
 ### Workforce / labor
 - **Worker** — Clock in/out → `clock_events`; Route → Share Location → `worker_locations`; More → Earnings (hours).
@@ -102,13 +106,24 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 - `mobile/lib/core/workforce/clock_hours.dart`
 - `mobile/lib/core/auth/user_profile.dart`
 - `brain/resident_invite_workflow.md`
+- `brain/test_credentials.md`
+- `supabase/seed_data/013_owner_test_account.md`
+
+### Recent GitHub (`main`)
+| Commit | Summary |
+|---|---|
+| `eb29777` | Unify owner + super_admin → Owner dashboard |
+| `401b13e` | OM workforce timecards + owner labor estimates |
+| `48ec1cf` | Billing door counts UI |
 
 ---
 
 ## Retest Checklist
 
 **Owner**
-- [ ] Financials shows billable doors and $/door per property
+- [ ] Staff login → Owner dashboard (not resident)
+- [ ] More → Admin Portal opens
+- [ ] Financials: labor est + Manage rates
 - [ ] Export financials CSV downloads
 
 **PM**
@@ -119,7 +134,7 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 **Staff signup**
 - [ ] Staff code → property manager dashboard (not resident)
 
-**Accounts:** `relaxedlivingtx@gmail.com` / `RelaxedLiving2026!` (super_admin) · `relaxedlivingtx+824@gmail.com` (PM test) · resident test in `brain/test_credentials.md`
+**Accounts:** `brain/test_credentials.md` — owner `relaxedlivingtx@gmail.com` · OM/worker/PM `adam.grant824+*` · resident `+res2`
 
 ---
 
