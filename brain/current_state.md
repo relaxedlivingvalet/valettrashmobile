@@ -86,6 +86,7 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | Units + resident codes | Tools → **Resident Invite Codes** (see `brain/resident_invite_workflow.md`) |
 | Staff codes | Tools → **Staff Invite Codes** |
 | Link PM/OM/driver | Manager / Worker Assignments |
+| **$/door + 85% min** | Tools → **Property Billing Rates** (or set on Add Property) |
 
 ### Key new files
 - `mobile/lib/core/billing/property_billing.dart`

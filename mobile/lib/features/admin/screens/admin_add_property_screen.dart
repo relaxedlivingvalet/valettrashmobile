@@ -24,6 +24,8 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
   final _endCtrl = TextEditingController(text: '22:00:00');
   final _buildingCtrl = TextEditingController(text: 'Building A');
   final _unitCtrl = TextEditingController(text: '101');
+  final _feePerDoorCtrl = TextEditingController(text: '25');
+  final _minBillablePctCtrl = TextEditingController(text: '85');
 
   bool _createStarterUnit = true;
   bool _saving = false;
@@ -39,6 +41,8 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
     _endCtrl.dispose();
     _buildingCtrl.dispose();
     _unitCtrl.dispose();
+    _feePerDoorCtrl.dispose();
+    _minBillablePctCtrl.dispose();
     super.dispose();
   }
 
@@ -50,6 +54,14 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
     final zip = _zipCtrl.text.trim();
     if (name.isEmpty || address.isEmpty || city.isEmpty || state.isEmpty || zip.isEmpty) {
       _snack('Fill in name, address, city, state, and ZIP', error: true);
+      return;
+    }
+
+    final feePerDoor = double.tryParse(_feePerDoorCtrl.text.trim()) ?? 25;
+    final minPct =
+        (double.tryParse(_minBillablePctCtrl.text.trim()) ?? 85) / 100;
+    if (feePerDoor <= 0 || minPct <= 0 || minPct > 1) {
+      _snack('Check fee per door and minimum billable % (1–100)', error: true);
       return;
     }
 
@@ -68,6 +80,8 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
             'service_window_end': _endCtrl.text.trim(),
             'free_comeback_pickups_per_month': 1,
             'comeback_pickup_fee': 5.00,
+            'monthly_fee_per_door': feePerDoor,
+            'minimum_billable_occupancy_percent': minPct,
             'is_active': true,
           })
           .select('id')
@@ -186,6 +200,31 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
                 const SizedBox(width: 12),
                 Expanded(child: _field(c, _endCtrl, 'End', '22:00:00')),
               ],
+            ),
+            const SizedBox(height: 20),
+            Text('PM BILLING (MONTHLY)',
+                style: GoogleFonts.inter(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                    color: c.textSecondary)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _field(c, _feePerDoorCtrl, 'Fee per billable door', '25'),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _field(
+                      c, _minBillablePctCtrl, 'Min billable %', '85'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'PM pays for at least the minimum % of units (e.g. 85) or actual occupancy, whichever is higher.',
+              style: GoogleFonts.inter(fontSize: 12, color: c.textSecondary),
             ),
             const SizedBox(height: 20),
             CheckboxListTile(

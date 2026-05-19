@@ -39,7 +39,7 @@
 
 ## Next Features (prioritized)
 
-- [ ] **Super admin: edit `monthly_fee_per_door` and 85% per property** — UI on Add Property or property detail
+- [x] **Super admin: edit `monthly_fee_per_door` and 85% per property** — Tools → Property Billing Rates; also on Add Property form
 - [ ] **Bulk unit import + bulk invite code generate** — CSV upload for apartment unit lists
 - [ ] **Stripe Connect webhooks** — populate `contractor_payouts`, subscriptions, invoices from live Stripe
 - [ ] **Stripe paid comeback requests + pickup packs** — `ResidentComebackRequestScreen` and `BuyExtraPickupsSection` record DB state; wire Stripe Checkout + webhook. Blocked on Stripe account + webhook secret.

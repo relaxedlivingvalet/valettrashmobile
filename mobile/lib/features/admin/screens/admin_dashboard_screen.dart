@@ -9,6 +9,7 @@ import '../../../core/widgets/skeleton_card.dart';
 import '../../shared/screens/service_requests_inbox_screen.dart';
 import 'admin_invite_codes_screen.dart';
 import 'admin_add_property_screen.dart';
+import 'admin_property_billing_screen.dart';
 import 'admin_staff_invites_screen.dart';
 import 'admin_manager_assignments_screen.dart';
 import 'admin_worker_assignments_screen.dart';
@@ -1434,6 +1435,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   subtitle:
                       'New site with address, service window, optional starter unit',
                   onTap: _showAddPropertyScreen),
+              _toolTile(c,
+                  icon: Icons.payments_outlined,
+                  color: AppColors.owner,
+                  title: 'Property Billing Rates',
+                  subtitle:
+                      'Fee per door and 85% minimum billable occupancy per site',
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              const AdminPropertyBillingScreen()))),
               _toolTile(c,
                   icon: Icons.supervisor_account_outlined,
                   color: AppColors.manager,

@@ -5,6 +5,12 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Admin property billing rates screen
+
+- **`AdminPropertyBillingScreen`** — edit `monthly_fee_per_door` and minimum billable % per property
+- **Add Property** — billing fields on create
+- **Tools** → Property Billing Rates
+
 ### 2026-05-19 — Brain refresh + GitHub push (financials, billing, invites)
 
 - **Updated**: `current_state.md`, `next_steps.md`, `decisions.md`, `resident_invite_workflow.md`
