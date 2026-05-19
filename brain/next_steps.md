@@ -12,7 +12,7 @@
   flutter build appbundle
   ```
   Upload the `.aab` to Google Play Console
-- [ ] **Apply migration** `supabase/migrations/007_service_requests.sql` in Supabase SQL editor (required for extra-service request flow)
+- [ ] **Apply migration `007_service_requests.sql`** — file is on `main`; with **GitHub ↔ Supabase** integration, push to production branch should auto-apply. Verify in [Database → Migrations](https://supabase.com/dashboard/project/airpwzzkyjqzeeqizvft/database/migrations). If still pending, use Integrations → GitHub → Deploy, or paste SQL in SQL Editor as fallback.
 - [ ] **Production Supabase config** — when deploying to a real domain:
   - Update Site URL from `http://localhost:8091` to `https://yourdomain.com`
   - Add `https://yourdomain.com` to Redirect URLs

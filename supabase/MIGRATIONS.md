@@ -8,6 +8,9 @@ Use **one** baseline for schema, then layer fixes.
 2. `migrations/004_rls_policies.sql` — row level security  
 3. `migrations/005_invites_user_properties_notifications_fix.sql` — invites, `user_properties`, notification broadcast, user self-insert policy, optional `pickup_id` on violations  
 4. `migrations/006_storage_violations.sql` — Storage bucket + policies  
+5. `migrations/007_service_requests.sql` — extra-service requests (Moving, Maid, Bulk, etc.) + RLS for resident / owner / super_admin  
+
+**GitHub integration:** If the Supabase project is linked to this repo (`relaxedlivingvalet/valettrashmobile`), new files under `supabase/migrations/` are applied on deploy when you push to the production branch. Check **Database ? Migrations** in the [dashboard](https://supabase.com/dashboard/project/airpwzzkyjqzeeqizvft) for pending/applied status.
 
 Skip these if you used `001_initial_schema` (they duplicate or conflict):
 

@@ -27,7 +27,7 @@ App: **http://localhost:8091**
 | Redirect URLs | `http://localhost:8091`, `com.relaxedliving.valet://login-callback` |
 
 - All core tables migrated, RLS enabled, SECURITY DEFINER RPCs in place
-- **`service_requests`** — migration file `007_service_requests.sql` (must be applied manually in Supabase SQL editor if not yet run)
+- **`service_requests`** — migration `007_service_requests.sql` on GitHub `main`; apply via **Supabase GitHub integration** (push/deploy) or SQL Editor. **Not verified live yet** — REST returns 404 until migration runs.
 - **`resident_concerns`** — support/Q&A messages from residents (Support tab)
 - `violations` storage bucket with RLS policies
 - Seed data: property `10000000-0000-0000-0000-000000000001` (Sunset Gardens), unit 104, invite code `WELCOME104`
