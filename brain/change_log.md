@@ -5,6 +5,15 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Workforce: OM timecards + owner labor estimates
+
+- **`ClockHours`** helper — shift pairing, week/month hour totals, labor cost
+- **`OmWorkforceScreen`** — OM Routes/More: on-duty, GPS sharing, shift history per worker
+- **`OwnerWorkforceScreen`** — edit driver `hourly_rate` via `set_worker_hourly_rate` RPC
+- **Owner Financials** — est labor week/month from clock × rate; net est subtracts labor
+- **Migration `012_workforce_labor.sql`** — hourly_rate column, clock_events/worker_locations RLS
+- **Worker Earnings** — refactored to shared `ClockHours`
+
 ### 2026-05-19 — GitHub push billing door counts (`48ec1cf`)
 
 - Door-count billing UI, migration 011, brain refresh

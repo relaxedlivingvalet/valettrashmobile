@@ -56,9 +56,9 @@ Manages the nightly operation. Five tabs:
 2. **Routes** — per-property nightly run detail with completion status
 3. **Alerts** — sent notification history
 4. **Reports** — comeback request history (7 days)
-5. **More** — Live Worker Map (real-time GPS), Send Notification, sign out
+5. **More** — **Workforce & Timecards**, Live Worker Map, sign out
 
-**To test:** Overview tab shows live metrics. More → Live Worker Map shows the worker dot when the worker account is on duty and sharing location.
+**To test:** Worker clocks in → OM **Workforce & Timecards** shows ON DUTY and week hours. Owner **Financials** shows est labor cost; **Manage rates** sets $/hr per driver.
 
 ---
 

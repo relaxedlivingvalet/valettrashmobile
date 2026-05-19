@@ -65,6 +65,12 @@
 - **Impact**: `brain/resident_invite_workflow.md`; PM export; admin `use_count` column fix.
 
 ### 2026-05-19
+- **Decision**: **Workforce ops on OM dashboard; labor $ on Owner** — same `clock_events` data, different UI.
+- **Reason**: OM runs nightly ops (who is on duty, hours, map); Owner approves pay and sees cost vs revenue.
+- **Alternatives Considered**: Single combined admin screen — rejected; PM does not manage payroll.
+- **Impact**: `OmWorkforceScreen`, `OwnerWorkforceScreen`, `clock_hours.dart`; steps tracking deferred.
+
+### 2026-05-19
 - **Decision**: `RoleHome` **polls** `users.role` after auth instead of defaulting to `resident` on first null row.
 - **Reason**: Race between `auth.signUp` and `register_staff_with_invite` left staff users on resident dashboard.
 - **Impact**: `fetchUserRole()` in `user_profile.dart`.

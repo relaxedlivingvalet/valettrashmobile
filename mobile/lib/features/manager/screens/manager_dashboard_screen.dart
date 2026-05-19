@@ -15,6 +15,7 @@ import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../../core/widgets/stat_tile.dart';
 import 'om_worker_map_screen.dart';
+import 'om_workforce_screen.dart';
 import 'simple_notification_sender_screen.dart';
 import 'today_comebacks_screen.dart';
 
@@ -766,12 +767,35 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
               ),
               const SizedBox(height: 20),
               PrimaryButton(
-                label: 'View Live Worker Map',
-                onPressed: () => Navigator.push(context,
-                    MaterialPageRoute(
-                        builder: (_) => const OmWorkerMapScreen())),
+                label: 'Workforce & Timecards',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        OmWorkforceScreen(propertyIds: _propertyIds),
+                  ),
+                ),
                 accent: AppColors.manager,
-                icon: Icons.map_outlined,
+                icon: Icons.schedule_outlined,
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OmWorkerMapScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.map_outlined, size: 18),
+                label: const Text('Live Worker Map'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
               if (_runs.isNotEmpty) ...[
@@ -1117,6 +1141,40 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                 ),
               ),
             ],
+          ),
+        ),
+
+        const SizedBox(height: 28),
+
+        const _DarkSectionLabel(text: 'WORKFORCE'),
+        const SizedBox(height: 12),
+
+        PrimaryButton(
+          label: 'Workforce & Timecards',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OmWorkforceScreen(propertyIds: _propertyIds),
+            ),
+          ),
+          accent: AppColors.manager,
+          icon: Icons.schedule_outlined,
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const OmWorkerMapScreen()),
+          ),
+          icon: const Icon(Icons.map_outlined, size: 18),
+          label: const Text('Live Worker Map'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.textSecondary,
+            side: const BorderSide(color: AppColors.border),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         ),
 

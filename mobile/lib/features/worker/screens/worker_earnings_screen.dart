@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/stat_tile.dart';
+import '../../../core/workforce/clock_hours.dart';
 
 class WorkerEarningsScreen extends StatefulWidget {
   const WorkerEarningsScreen({super.key});
@@ -14,34 +15,13 @@ class _WorkerEarningsScreenState extends State<WorkerEarningsScreen> {
   bool _loading = true;
   List<Map<String, dynamic>> _events = [];
 
-  double get _weekHours => _computeHours(_weekStart);
-  double get _monthHours => _computeHours(_monthStart);
+  List<ClockShift> get _shifts => ClockHours.shiftsFromEvents(_events);
 
-  DateTime get _weekStart {
-    final now = DateTime.now();
-    return now.subtract(Duration(days: now.weekday - 1));
-  }
+  double get _weekHours =>
+      ClockHours.totalHours(_shifts, since: ClockHours.weekStartLocal());
 
-  DateTime get _monthStart {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, 1);
-  }
-
-  double _computeHours(DateTime since) {
-    double total = 0;
-    DateTime? lastIn;
-    for (final e in _events) {
-      final ts = DateTime.parse(e['created_at'] as String).toLocal();
-      if (ts.isBefore(since)) continue;
-      if (e['event_type'] == 'clock_in') {
-        lastIn = ts;
-      } else if (e['event_type'] == 'clock_out' && lastIn != null) {
-        total += ts.difference(lastIn).inMinutes / 60.0;
-        lastIn = null;
-      }
-    }
-    return total;
-  }
+  double get _monthHours =>
+      ClockHours.totalHours(_shifts, since: ClockHours.monthStartLocal());
 
   @override
   void initState() {
@@ -70,17 +50,6 @@ class _WorkerEarningsScreenState extends State<WorkerEarningsScreen> {
     }
   }
 
-  String _fmt(double hours) {
-    final h = hours.floor();
-    final m = ((hours - h) * 60).round();
-    return m > 0 ? '${h}h ${m}m' : '${h}h';
-  }
-
-  String _fmtTs(String iso) {
-    final dt = DateTime.parse(iso).toLocal();
-    return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,9 +75,13 @@ class _WorkerEarningsScreenState extends State<WorkerEarningsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
               children: [
                 Row(children: [
-                  StatTile(value: _fmt(_weekHours), label: 'This Week'),
+                  StatTile(
+                      value: ClockHours.formatDuration(_weekHours),
+                      label: 'This Week'),
                   const SizedBox(width: 8),
-                  StatTile(value: _fmt(_monthHours), label: 'This Month'),
+                  StatTile(
+                      value: ClockHours.formatDuration(_monthHours),
+                      label: 'This Month'),
                 ]),
                 const SizedBox(height: 28),
                 const Text('CLOCK HISTORY — LAST 30 DAYS',
@@ -131,23 +104,14 @@ class _WorkerEarningsScreenState extends State<WorkerEarningsScreen> {
 
   List<Widget> _buildPairs() {
     final widgets = <Widget>[];
-    DateTime? lastIn;
-    String? lastInTs;
-    for (final e in _events.reversed) {
-      final isIn = e['event_type'] == 'clock_in';
-      if (isIn) {
-        lastIn = DateTime.parse(e['created_at'] as String).toLocal();
-        lastInTs = e['created_at'] as String;
-      } else if (!isIn && lastIn != null) {
-        final out = DateTime.parse(e['created_at'] as String).toLocal();
-        final hours = out.difference(lastIn).inMinutes / 60.0;
-        widgets.add(_shiftTile(
-            _fmtTs(lastInTs!), _fmtTs(e['created_at'] as String), _fmt(hours)));
-        lastIn = null;
-      }
-    }
-    if (lastIn != null) {
-      widgets.add(_shiftTile(_fmtTs(lastInTs!), 'Still clocked in', '—'));
+    for (final s in _shifts.reversed) {
+      widgets.add(_shiftTile(
+        ClockHours.formatTimestamp(s.clockInIso),
+        s.open
+            ? 'Still clocked in'
+            : ClockHours.formatTimestamp(s.clockOutIso!),
+        s.open ? '—' : ClockHours.formatDuration(s.hours),
+      ));
     }
     return widgets;
   }

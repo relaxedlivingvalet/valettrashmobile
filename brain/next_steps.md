@@ -17,6 +17,8 @@
 - [x] **Apply migration `009_staff_invites.sql`** — applied live May 19 via Supabase MCP (`staff_invites`).
 - [x] **Apply migration `010_property_billing_metrics.sql`** — applied live May 19 (`monthly_fee_per_door`, `minimum_billable_occupancy_percent`).
 - [x] **Apply migration `011_property_door_counts.sql`** — applied live May 19 (`billing_total_doors`, `billing_occupied_doors`).
+- [ ] **Apply migration `012_workforce_labor.sql`** — `hourly_rate`, clock_events/worker_locations policies, `set_worker_hourly_rate` RPC.
+- [ ] **Workforce QA** — worker clock in → OM Workforce shows ON DUTY; owner Financials shows est labor $; edit driver hourly rate.
 - [ ] **Property Billing Rates QA** — enter total/occupied/$ for Riverside Lofts; verify owner + PM dashboards match.
 - [ ] **Staff invite QA** — super admin generates code → Staff signup → lands on correct role dashboard (sign out/in if cached wrong role).
 - [ ] **Owner Financials QA** — per-property revenue/door, export CSV, Stripe payout section when data exists.
@@ -50,6 +52,7 @@
   - Android: FCM (Firebase Cloud Messaging) — free
   - iOS: APNs via FCM or OneSignal — requires Apple Developer account
 - [ ] **Worker location on native** — currently uses `dart:html` (web only). Swap to `geolocator` package for iOS/Android builds
+- [ ] **Steps / activity tracking** — optional pedometer on worker app; OM summary only (deferred)
 - [ ] **CSV export on native** — `PmComplianceReportScreen` uses `dart:html` for download. Swap to `path_provider` + `share_plus` for native builds
 
 ---

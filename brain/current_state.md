@@ -4,11 +4,10 @@
 **Owner/PM financial & onboarding QA** — billing by total/occupied doors + auto-calculated billable/monthly $. Live Supabase migrations through **011**. Flutter web on port **8091**.
 
 ## Resume Here (next session)
-1. **Super admin** → Tools → **Property Billing Rates** — enter total doors, occupied, $/door; confirm CALCULATED block.
-2. **Owner** → Financials — revenue/door uses saved door counts; Export CSV.
-3. **PM** → Properties — occupancy banner + billable estimate; Export unit codes.
-4. See `brain/resident_invite_workflow.md` for resident codes.
-4. **Stripe Connect** — wire webhooks so payouts/MRR populate from live Stripe (UI ready).
+1. **Apply migration `012_workforce_labor.sql`** on Supabase (hourly_rate, clock_events RLS, `set_worker_hourly_rate` RPC).
+2. **OM** → Routes or More → **Workforce & Timecards** — verify clock in/out + on-duty badges.
+3. **Owner** → Financials → **Labor (from clock)** + **Manage rates** — set driver $/hr, compare to payouts.
+4. **Stripe Connect** — wire webhooks so payouts/MRR populate from live Stripe.
 5. Blockers: RLS on ~19 tables, Stripe checkout for paid comebacks, iOS signing.
 
 ## Run the App
@@ -39,6 +38,7 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | `staff_invites` | `009_staff_invites.sql` | Staff self-signup RPCs |
 | `property_billing_metrics` | `010_property_billing_metrics.sql` | `monthly_fee_per_door` (default $25), `minimum_billable_occupancy_percent` (default 0.85) |
 | `property_door_counts` | `011_property_door_counts.sql` | `billing_total_doors`, `billing_occupied_doors` (manual entry per complex) |
+| `workforce_labor` | `012_workforce_labor.sql` | `users.hourly_rate`, clock_events/worker_locations RLS, `set_worker_hourly_rate` RPC |
 
 ### Billing rules (app + DB)
 - **Inputs (super admin):** total doors, occupied doors, $/billable door/month on **Property Billing Rates**.
@@ -57,7 +57,7 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 |---|---|---|
 | `resident` | `ResidentDashboardScreen` | Dark |
 | `driver` | `WorkerDashboardScreen` | Dark |
-| `operations_manager` | `ManagerDashboardScreen` | Dark |
+| `operations_manager` | `ManagerDashboardScreen` — **Workforce & Timecards**, Live Worker Map | Dark |
 | `property_manager` | `PropertyManagerDashboardNewScreen` | Light |
 | `owner` | `OwnerDashboardScreen` | Light |
 | `super_admin` | `AdminDashboardScreen` | Light |
@@ -79,7 +79,7 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | Tab | Content |
 |---|---|
 | Overview | Portfolio summary |
-| **Financials** | Contract revenue, revenue/door, MRR, per-property breakdown, Stripe payout list, **Export CSV** |
+| **Financials** | Contract revenue, **labor est from clock**, revenue/door, MRR, payouts, **Manage rates** → `OwnerWorkforceScreen`, **Export CSV** |
 | Reports | Properties with occupancy + billable + $/door |
 | More | Service requests inbox, role switchers |
 
@@ -92,8 +92,15 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | Link PM/OM/driver | Manager / Worker Assignments |
 | **Door counts + $/door** | Tools → **Property Billing Rates** (total, occupied, rate → auto billable) |
 
+### Workforce / labor
+- **Worker** — Clock in/out → `clock_events`; Route → Share Location → `worker_locations`; More → Earnings (hours).
+- **OM** — `OmWorkforceScreen`: on-duty, week hours, shift history, link to map.
+- **Owner** — Financials labor tiles; `OwnerWorkforceScreen`: edit hourly rate via RPC, est week/month labor $.
+- **Helper** — `mobile/lib/core/workforce/clock_hours.dart`.
+
 ### Key new files
 - `mobile/lib/core/billing/property_billing.dart`
+- `mobile/lib/core/workforce/clock_hours.dart`
 - `mobile/lib/core/auth/user_profile.dart`
 - `brain/resident_invite_workflow.md`
 

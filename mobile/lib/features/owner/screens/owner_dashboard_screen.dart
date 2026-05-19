@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/billing/property_billing.dart';
+import '../../../core/workforce/clock_hours.dart';
 import '../../../core/platform/csv_download_stub.dart'
     if (dart.library.html) '../../../core/platform/csv_download_web.dart';
 import '../../../core/theme/app_colors.dart';
@@ -18,6 +19,7 @@ import '../../manager/screens/simple_notification_sender_screen.dart';
 import '../../resident/screens/resident_dashboard_screen.dart';
 import '../../shared/screens/service_requests_inbox_screen.dart';
 import '../../worker/screens/worker_dashboard_screen.dart';
+import 'owner_workforce_screen.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
   const OwnerDashboardScreen({super.key});
@@ -46,6 +48,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   double _portfolioRevenuePerDoor = 0;
   int _portfolioBillableDoors = 0;
   List<Map<String, dynamic>> _stripePayouts = [];
+  double _laborWeekHours = 0;
+  double _laborWeekCost = 0;
+  double _laborMonthCost = 0;
 
   AppColorsScheme _c = AppColorsScheme.dark;
 
@@ -281,6 +286,47 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         }
       } catch (_) {}
 
+      double laborWeekH = 0;
+      double laborWeekC = 0;
+      double laborMonthC = 0;
+      try {
+        final driverRows = await client
+            .from('users')
+            .select('id, hourly_rate')
+            .eq('role', 'driver')
+            .eq('is_active', true);
+        final drivers = List<Map<String, dynamic>>.from(driverRows as List);
+        final driverIds = drivers
+            .map((d) => d['id']?.toString())
+            .whereType<String>()
+            .toList();
+        if (driverIds.isNotEmpty) {
+          final since = ClockHours.monthStartLocal().toUtc().toIso8601String();
+          final eventRows = await client
+              .from('clock_events')
+              .select('user_id, event_type, created_at')
+              .filter('user_id', 'in', '(${driverIds.join(',')})')
+              .gte('created_at', since)
+              .order('created_at', ascending: true);
+          final events =
+              List<Map<String, dynamic>>.from(eventRows as List);
+          final weekStart = ClockHours.weekStartLocal();
+          final monthStart = ClockHours.monthStartLocal();
+          for (final d in drivers) {
+            final id = d['id']?.toString() ?? '';
+            final rate = (d['hourly_rate'] as num?)?.toDouble() ?? 18.0;
+            final userEvents =
+                events.where((e) => e['user_id']?.toString() == id).toList();
+            final shifts = ClockHours.shiftsFromEvents(userEvents);
+            final wh = ClockHours.totalHours(shifts, since: weekStart);
+            final mh = ClockHours.totalHours(shifts, since: monthStart);
+            laborWeekH += wh;
+            laborWeekC += ClockHours.laborCost(hours: wh, hourlyRate: rate);
+            laborMonthC += ClockHours.laborCost(hours: mh, hourlyRate: rate);
+          }
+        }
+      } catch (_) {}
+
       properties.sort(
           (a, b) => (a['name'] as String).compareTo(b['name'] as String));
 
@@ -360,6 +406,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           billableDoors: billableTotal,
         );
         _stripePayouts = payouts;
+        _laborWeekHours = laborWeekH;
+        _laborWeekCost = laborWeekC;
+        _laborMonthCost = laborMonthC;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -974,7 +1023,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         _residentMrr +
         _paidInvoicesTotal +
         _paidComebacksTotal;
-    final netEst = grossMonthly - _contractorPayoutsTotal;
+    final netEst =
+        grossMonthly - _contractorPayoutsTotal - _laborMonthCost;
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -1047,8 +1097,65 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   child: MetricTile(
                     label: 'Net est / mo',
                     value: '\$${netEst.toStringAsFixed(0)}',
-                    subtitle: 'After contractor payouts',
+                    subtitle: 'After labor & payouts',
                     valueColor: netEst >= 0 ? AppColors.success : AppColors.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'LABOR (FROM CLOCK)',
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: _c.textSecondary,
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OwnerWorkforceScreen(),
+                  ),
+                ),
+                child: Text(
+                  'Manage rates',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.owner,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: BentoCard(
+                  height: 88,
+                  child: MetricTile(
+                    label: 'Est labor (week)',
+                    value: ClockHours.formatMoney(_laborWeekCost),
+                    subtitle:
+                        '${ClockHours.formatDuration(_laborWeekHours)} clocked',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 88,
+                  child: MetricTile(
+                    label: 'Est labor (month)',
+                    value: ClockHours.formatMoney(_laborMonthCost),
+                    subtitle: 'Hours × hourly rates',
                   ),
                 ),
               ),
@@ -1111,6 +1218,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           const SizedBox(height: 12),
           _buildFinancialLine('Paid invoices (all time)', _paidInvoicesTotal),
           _buildFinancialLine('Paid comebacks (all time)', _paidComebacksTotal),
+          _buildFinancialLine('Est labor (month, clock)', _laborMonthCost),
           _buildFinancialLine('Contractor payouts logged', _contractorPayoutsTotal),
         ],
       ),
