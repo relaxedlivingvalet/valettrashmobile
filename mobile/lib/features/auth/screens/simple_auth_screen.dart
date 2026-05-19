@@ -15,6 +15,7 @@ import '../../test/screens/test_connection_screen.dart';
 import '../../worker/screens/worker_dashboard_screen.dart';
 import 'change_password_screen.dart';
 import 'resident_signup_screen.dart';
+import 'staff_signup_screen.dart';
 
 class SimpleAuthScreen extends StatefulWidget {
   const SimpleAuthScreen({super.key});
@@ -452,29 +453,62 @@ class _SimpleAuthScreenState extends State<SimpleAuthScreen> {
   }
 
   Widget _buildSignUpLink() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
       children: [
         Text(
-          "Don't have an account? ",
+          "Don't have an account?",
           style: GoogleFonts.inter(
             fontSize: 13,
             color: AppColors.textSecondary,
           ),
         ),
-        GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ResidentSignupScreen()),
-          ),
-          child: Text(
-            'Sign up',
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.rlvBlue,
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ResidentSignupScreen()),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.resident,
+                  side: const BorderSide(color: AppColors.resident),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: Text(
+                  'Resident',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const StaffSignupScreen()),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.manager,
+                  side: const BorderSide(color: AppColors.manager),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: Text(
+                  'Staff',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     ).animate(delay: 420.ms).fadeIn(duration: 250.ms);

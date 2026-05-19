@@ -29,6 +29,8 @@ class ResidentDashboardScreen extends StatefulWidget {
 
 class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   int _tabIndex = 0;
+  /// 0 = request a service, 1 = buy comeback packs (Extra Services tab only).
+  int _extraServicesSegment = 0;
   bool _loading = true;
   String? _loadError;
 
@@ -282,6 +284,13 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     setState(() => _tabIndex = index);
   }
 
+  void _openExtraServices({int segment = 0}) {
+    setState(() {
+      _tabIndex = 1;
+      _extraServicesSegment = segment;
+    });
+  }
+
   Future<void> _signOut(BuildContext ctx) async {
     await Supabase.instance.client.auth.signOut();
     if (!ctx.mounted) return;
@@ -332,15 +341,17 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   }
 
   Widget _buildTab() {
-    return IndexedStack(
-      index: _tabIndex,
-      children: [
-        _buildHomeTab(),
-        _buildExtraServicesTab(),
-        _buildSupportTab(),
-        _buildProfileTab(),
-      ],
-    );
+    // Only mount the active tab so hidden grids cannot steal taps (IndexedStack issue on web).
+    switch (_tabIndex) {
+      case 1:
+        return _buildExtraServicesTab();
+      case 2:
+        return _buildSupportTab();
+      case 3:
+        return _buildProfileTab();
+      default:
+        return _buildHomeTab();
+    }
   }
 
   // ── Home Tab ──────────────────────────────────────────────────────────────────
@@ -640,14 +651,14 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             icon: Icons.history,
             title: 'Service History',
             subtitle: 'View past pickups',
-            onTap: () => setState(() => _tabIndex = 1),
+            onTap: () => _openExtraServices(segment: 0),
           ),
           const Divider(height: 1, color: AppColors.border),
           _quickActionTile(
             icon: Icons.shopping_cart_outlined,
             title: 'Buy Extra Pickups',
             subtitle: '1/\$5 · 3/\$14 · 5/\$20',
-            onTap: () => setState(() => _tabIndex = 1),
+            onTap: () => _openExtraServices(segment: 1),
           ),
         ],
       ),
@@ -697,36 +708,45 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   }
 
   Widget _buildAvailableServicesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Available Services',
-                style: GoogleFonts.montserrat(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+    return BentoCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () => _openExtraServices(segment: 0),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              const Icon(Icons.grid_view_outlined,
+                  color: AppColors.success, size: 24),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Extra Services & Pickups',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Moving, maid, bulk trash · buy comeback packs',
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            TextButton(
-              onPressed: () => setState(() => _tabIndex = 1),
-              child: Text(
-                'See all',
-                style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.rlvBlue),
-              ),
-            ),
-          ],
+              const Icon(Icons.chevron_right,
+                  color: AppColors.textSecondary, size: 20),
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
-        ExtraServicesGrid(propertyId: _propertyId, compact: true),
-      ],
+      ),
     );
   }
 
@@ -932,24 +952,67 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
 
   // ── Extra Services Tab ────────────────────────────────────────────────────────
 
+  Widget _buildExtraServicesSegmentButton(String label, int index) {
+    final selected = _extraServicesSegment == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _extraServicesSegment = index),
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.rlvBlue : AppColors.surface1,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? AppColors.rlvBlue : AppColors.border,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildExtraServicesTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionHeader('Extra Services'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Row(
+            children: [
+              _buildExtraServicesSegmentButton('Request Service', 0),
+              const SizedBox(width: 8),
+              _buildExtraServicesSegmentButton('Buy Comebacks', 1),
+            ],
+          ),
+        ),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
-              Text(
-                'Tap a service to submit a request with date and time.',
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 16),
-              ExtraServicesGrid(propertyId: _propertyId),
-              const SizedBox(height: 24),
-              BuyExtraPickupsSection(onPurchased: _load),
+              if (_extraServicesSegment == 0) ...[
+                Text(
+                  'Tap a service to submit a request with date and time.',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                ExtraServicesGrid(propertyId: _propertyId),
+              ] else ...[
+                BuyExtraPickupsSection(onPurchased: _load),
+              ],
               const SizedBox(height: 24),
               Text(
                 'SERVICE HISTORY',

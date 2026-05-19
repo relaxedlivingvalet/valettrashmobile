@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import 'service_request_sheet.dart';
 
-/// Fixed-height service grid (avoids unbounded GridView glitches in ListView / tab switches).
+/// Service tiles in a fixed [Wrap] layout (reliable on web; no stacked hit targets).
 class ExtraServicesGrid extends StatelessWidget {
   const ExtraServicesGrid({
     super.key,
@@ -25,59 +25,64 @@ class ExtraServicesGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final crossCount = 2;
-    final rows = (_services.length / crossCount).ceil();
-    final aspect = compact ? 1.45 : 1.2;
-    final rowHeight = compact ? 100.0 : 110.0;
-    final gridHeight = rows * rowHeight + (rows - 1) * 10;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 10.0;
+        const crossCount = 2;
+        final cellWidth = (constraints.maxWidth - spacing) / crossCount;
+        final cellHeight = compact ? 96.0 : 108.0;
 
-    return SizedBox(
-      height: gridHeight,
-      child: GridView.count(
-        crossAxisCount: crossCount,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: aspect,
-        physics: const NeverScrollableScrollPhysics(),
-        children: _services.map((s) {
-          return InkWell(
-            onTap: () => showServiceRequestSheet(
-              context,
-              initialServiceType: s.$3,
-              propertyId: propertyId,
-            ),
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              decoration: BoxDecoration(
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: _services.map((s) {
+            return SizedBox(
+              width: cellWidth,
+              height: cellHeight,
+              child: Material(
                 color: AppColors.surface1,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(s.$1, color: AppColors.success, size: compact ? 26 : 32),
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Text(
-                      s.$2,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: compact ? 11 : 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
+                child: InkWell(
+                  onTap: () => showServiceRequestSheet(
+                    context,
+                    initialServiceType: s.$3,
+                    propertyId: propertyId,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(s.$1,
+                            color: AppColors.success, size: compact ? 26 : 30),
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            s.$2,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: compact ? 11 : 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          );
-        }).toList(),
-      ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }

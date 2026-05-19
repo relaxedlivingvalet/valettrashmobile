@@ -1,12 +1,12 @@
 # Current State
 
 ## Current Objective
-**QA / client retest of resident dashboard** — mock-aligned home, comeback rules, extra services, support, and owner/admin inboxes. Live Supabase has migrations through **008**. Flutter web dev server typically on port **8091**.
+**QA / client retest** — resident dashboard + **staff invite self-signup** (PM / OM / driver). Live Supabase has migrations through **009** (`staff_invites`). Flutter web dev server typically on port **8091**.
 
 ## Resume Here (next session)
-1. **Pushed to GitHub** — `a53e5e4` on `main` (`relaxedlivingvalet/valettrashmobile`).
-2. Retest as resident → confirm tab glitch gone, service submit with date+time, buy banked comebacks, request pickup tiers.
-3. Confirm owner/admin inbox receives `service_requests` after submit.
+1. **Staff invite smoke test** — super admin → Tools → Staff Invite Codes → generate; login → Staff → verify + signup.
+2. Retest resident dashboard (tabs, comebacks, service requests → inbox).
+3. Commit/push staff invite wiring if not yet on `main`.
 4. Blockers before store: RLS on 19 tables, Stripe for paid comebacks, iOS signing.
 
 ## Run the App
@@ -39,6 +39,7 @@ App: **http://localhost:8091** — hard refresh or `R` hot restart after pulling
 | `add_owner_user_role` | (enum fix) | `user_role` + `'owner'` |
 | `007_service_requests` | `007_service_requests.sql` | `service_requests` table + RLS |
 | `resident_comeback_balance_service_time` | `008_resident_comeback_balance_service_time.sql` | `purchased_comeback_balance`, `preferred_time`, resident UPDATE on `resident_units` |
+| `staff_invites` | `009_staff_invites.sql` | `staff_invites` table; RPCs `verify_staff_invite_code`, `register_staff_with_invite` |
 
 - **`service_requests`** — resident insert/read; owner + `super_admin` read/update. Columns: `preferred_date`, `preferred_time`, `message`, `service_type`, `status`.
 - **`resident_units.purchased_comeback_balance`** — INTEGER default 0; purchased comebacks roll over; residents can UPDATE own row (policy from 008).
@@ -92,6 +93,16 @@ App: **http://localhost:8091** — hard refresh or `R` hot restart after pulling
 - `mobile/lib/features/resident/widgets/buy_extra_pickups_section.dart`
 - `mobile/lib/features/resident/models/comeback_pricing.dart`
 - `mobile/lib/features/shared/screens/service_requests_inbox_screen.dart`
+
+### Super admin onboarding (May 2026)
+
+| Task | Where in app |
+|------|----------------|
+| **Add property** | **Properties → Add** or **Tools → Add Property** (optional starter building + unit 101) |
+| **Link PM / OM** | **Properties → Assign managers** or **Tools → Manager Assignments** → writes `user_properties`; PM optional **company_id** |
+| **Assign driver** | **Tools → Worker Assignments** |
+| **Invite residents** | **Tools → Invite Codes** |
+| **Set user role** | **Users** tab (filter chips) — staff accounts must exist in Supabase Auth first |
 
 ### Owner / Admin inboxes
 

@@ -5,6 +5,31 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Staff invite codes (self-signup for PM / OM / driver)
+
+- **Migration `009_staff_invites`** — applied live via Supabase MCP (`staff_invites` name)
+- **RPCs** — `verify_staff_invite_code` (anon), `register_staff_with_invite` (authenticated); links `user_properties`, PM sets `company_id`, driver gets `worker_assignments`
+- **Flutter** — `AdminStaffInvitesScreen` (Tools), `StaffSignupScreen`, login **Resident | Staff** buttons on `simple_auth_screen.dart`
+
+### 2026-05-19 — Admin add property + manager assignments UI
+
+- **`AdminAddPropertyScreen`** — create property + optional starter building/floor/unit
+- **`AdminManagerAssignmentsScreen`** — link `property_manager` / `operations_manager` via `user_properties`; optional `company_id` for PM
+- **Properties tab** — Add, Assign managers, Assign workers; per-property quick actions
+- **Tools** — Add Property, Manager Assignments, Worker Assignments
+
+### 2026-05-19 — Worker assignment UI + worker route property display
+
+- **`AdminWorkerAssignmentsScreen`** — always-visible worker + property dropdowns and Assign button; fixes insert (no broken upsert); loads drivers/properties from Supabase
+- **Admin Properties tab** — “Assign workers” header button + per-property assign icon
+- **Worker Route tab** — lists assigned properties, multi-property chips, clock-in requires assignment; resident ON DUTY when clocked in at property
+
+### 2026-05-19 — Fix extra services ghost taps / overlap
+
+- **Cause**: `IndexedStack` kept all tabs in the tree; invisible service grid still received clicks on web. Home tab also duplicated the grid.
+- **Fix**: Mount only the active tab (`switch`); split Extra Services into **Request Service** | **Buy Comebacks** segments; home uses a single CTA card; grid uses `Wrap` + fixed tile sizes.
+- **Files**: `resident_dashboard_screen.dart`, `extra_services_grid.dart`
+
 ### 2026-05-19 — Pushed Session 15 to GitHub
 
 - **Commit** `a53e5e4` on `main` — resident comebacks, dashboard UI fixes, migration 008, brain docs

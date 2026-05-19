@@ -8,6 +8,10 @@ import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../shared/screens/service_requests_inbox_screen.dart';
 import 'admin_invite_codes_screen.dart';
+import 'admin_add_property_screen.dart';
+import 'admin_staff_invites_screen.dart';
+import 'admin_manager_assignments_screen.dart';
+import 'admin_worker_assignments_screen.dart';
 
 // ── Roles available for assignment ────────────────────────────────────────────
 const _kRoles = [
@@ -41,6 +45,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   List<Map<String, dynamic>> _users = [];
   bool _usersLoading = true;
   String _userSearch = '';
+  /// null = all roles
+  String? _userRoleFilter;
 
   // Properties tab
   List<Map<String, dynamic>> _properties = [];
@@ -316,8 +322,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // ── Users Tab ────────────────────────────────────────────────────────────────
 
-  Widget _buildUsersTab(AppColorsScheme c) {
-    final filtered = _users.where((u) {
+  List<Map<String, dynamic>> get _filteredUsers {
+    return _users.where((u) {
+      final role = u['role']?.toString() ?? '';
+      if (_userRoleFilter != null && role != _userRoleFilter) return false;
       if (_userSearch.isEmpty) return true;
       final q = _userSearch.toLowerCase();
       final name =
@@ -325,11 +333,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final email = (u['email'] ?? '').toString().toLowerCase();
       return name.contains(q) || email.contains(q);
     }).toList();
+  }
+
+  String get _usersSubtitle {
+    final filtered = _filteredUsers.length;
+    final total = _users.length;
+    if (_userRoleFilter == null && _userSearch.isEmpty) {
+      return '$total accounts';
+    }
+    final roleLabel = _userRoleFilter == null
+        ? 'all roles'
+        : (_kRoleLabels[_userRoleFilter] ?? _userRoleFilter!);
+    return '$filtered of $total · $roleLabel';
+  }
+
+  Widget _buildUsersTab(AppColorsScheme c) {
+    final filtered = _filteredUsers;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _header(c, 'Users', '${_users.length} accounts'),
+        _header(c, 'Users', _usersSubtitle),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
           child: TextField(
@@ -358,17 +382,61 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
         ),
+        SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            children: [
+              _filterChip(c, 'All', _userRoleFilter == null,
+                  () => setState(() => _userRoleFilter = null)),
+              _filterChip(c, 'Resident', _userRoleFilter == 'resident',
+                  () => setState(() => _userRoleFilter = 'resident')),
+              _filterChip(c, 'Worker', _userRoleFilter == 'driver',
+                  () => setState(() => _userRoleFilter = 'driver')),
+              _filterChip(
+                  c,
+                  'Property Mgr',
+                  _userRoleFilter == 'property_manager',
+                  () => setState(() => _userRoleFilter = 'property_manager')),
+              _filterChip(
+                  c,
+                  'Ops Manager',
+                  _userRoleFilter == 'operations_manager',
+                  () =>
+                      setState(() => _userRoleFilter = 'operations_manager')),
+              _filterChip(c, 'Super Admin', _userRoleFilter == 'super_admin',
+                  () => setState(() => _userRoleFilter = 'super_admin')),
+            ],
+          ),
+        ),
         Expanded(
           child: _usersLoading
               ? _skeletons()
               : RefreshIndicator(
                   onRefresh: _loadUsers,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (ctx, i) => _userCard(c, filtered[i]),
-                  ),
+                  child: filtered.isEmpty
+                      ? ListView(
+                          children: [
+                            const SizedBox(height: 48),
+                            Icon(Icons.people_outline,
+                                size: 48, color: c.textMuted),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No users match this filter',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: c.textSecondary, fontSize: 14),
+                            ),
+                          ],
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (ctx, i) => _userCard(c, filtered[i]),
+                        ),
                 ),
         ),
       ],
@@ -511,7 +579,70 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _header(c, 'Properties', '${_properties.length} properties'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Properties',
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: c.textPrimary,
+                            letterSpacing: -0.5)),
+                    Text('${_properties.length} properties',
+                        style: TextStyle(
+                            fontSize: 12, color: c.textSecondary)),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _showAddPropertyScreen,
+                icon: const Icon(Icons.add_business_outlined, size: 18),
+                label: const Text('Add'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF6366F1),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showManagerAssignmentsScreen(),
+                  icon: const Icon(Icons.supervisor_account_outlined, size: 18),
+                  label: const Text('Assign managers'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.manager,
+                    side: const BorderSide(color: AppColors.manager),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showWorkerAssignmentsScreen(),
+                  icon: const Icon(Icons.engineering_outlined, size: 18),
+                  label: const Text('Assign workers'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF6366F1),
+                    side: const BorderSide(color: Color(0xFF6366F1)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
         Expanded(
           child: _propsLoading
               ? _skeletons()
@@ -581,6 +712,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       style: TextStyle(
                           color: c.textSecondary, fontSize: 12)),
                 ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Assign manager',
+              icon: Icon(Icons.supervisor_account_outlined,
+                  color: c.textMuted, size: 22),
+              onPressed: () => _showManagerAssignmentsScreen(
+                propertyId: p['id']?.toString(),
+                propertyName: p['name']?.toString(),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Assign worker',
+              icon: Icon(Icons.engineering_outlined,
+                  color: c.textMuted, size: 22),
+              onPressed: () => _showWorkerAssignmentsScreen(
+                propertyId: p['id']?.toString(),
+                propertyName: p['name']?.toString(),
               ),
             ),
             Icon(Icons.chevron_right, color: c.textMuted, size: 18),
@@ -1254,12 +1403,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               _toolTile(c,
                   icon: Icons.vpn_key_outlined,
                   color: const Color(0xFF6366F1),
-                  title: 'Invite Codes',
-                  subtitle: 'Generate and revoke invite codes per property',
+                  title: 'Resident Invite Codes',
+                  subtitle: 'Codes for resident signup (unit + property)',
                   onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
                           builder: (_) => AdminInviteCodesScreen(
+                              properties: _properties)))),
+              _toolTile(c,
+                  icon: Icons.badge_outlined,
+                  color: AppColors.manager,
+                  title: 'Staff Invite Codes',
+                  subtitle:
+                      'PM, ops manager, or driver — self signup with code',
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => AdminStaffInvitesScreen(
                               properties: _properties)))),
               _toolTile(c,
                   icon: Icons.replay_outlined,
@@ -1268,10 +1428,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   subtitle: 'Review and manage all pending comebacks',
                   onTap: () => _showComebacksScreen()),
               _toolTile(c,
-                  icon: Icons.engineering_outlined,
+                  icon: Icons.add_business_outlined,
+                  color: const Color(0xFF6366F1),
+                  title: 'Add Property',
+                  subtitle:
+                      'New site with address, service window, optional starter unit',
+                  onTap: _showAddPropertyScreen),
+              _toolTile(c,
+                  icon: Icons.supervisor_account_outlined,
                   color: AppColors.manager,
+                  title: 'Manager Assignments',
+                  subtitle:
+                      'Link property managers & ops managers to properties',
+                  onTap: () => _showManagerAssignmentsScreen()),
+              _toolTile(c,
+                  icon: Icons.engineering_outlined,
+                  color: AppColors.worker,
                   title: 'Worker Assignments',
-                  subtitle: 'Assign and remove workers from properties',
+                  subtitle:
+                      'Pick a driver and property — shows on worker Route tab',
                   onTap: () => _showWorkerAssignmentsScreen()),
               const SizedBox(height: 16),
               _toolSection(c, 'ACCOUNT'),
@@ -1309,13 +1484,48 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  void _showWorkerAssignmentsScreen() {
+  void _showAddPropertyScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminAddPropertyScreen()),
+    ).then((createdId) {
+      if (mounted && createdId != null) {
+        _loadProperties();
+        _snack('Property created');
+      }
+    });
+  }
+
+  void _showManagerAssignmentsScreen({
+    String? propertyId,
+    String? propertyName,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(
-          builder: (_) => _AdminWorkerAssignmentsScreen(
-              properties: _properties)),
+        builder: (_) => AdminManagerAssignmentsScreen(
+          initialPropertyId: propertyId,
+          initialPropertyName: propertyName,
+        ),
+      ),
     );
+  }
+
+  void _showWorkerAssignmentsScreen({
+    String? propertyId,
+    String? propertyName,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminWorkerAssignmentsScreen(
+          initialPropertyId: propertyId,
+          initialPropertyName: propertyName,
+        ),
+      ),
+    ).then((_) {
+      if (mounted) _loadProperties();
+    });
   }
 
   // ── Shared Widgets ────────────────────────────────────────────────────────────
@@ -1842,250 +2052,3 @@ class _AdminComebacksScreenState extends State<_AdminComebacksScreen> {
   }
 }
 
-// ── Admin Worker Assignments Screen ──────────────────────────────────────────
-
-class _AdminWorkerAssignmentsScreen extends StatefulWidget {
-  final List<Map<String, dynamic>> properties;
-  const _AdminWorkerAssignmentsScreen({required this.properties});
-
-  @override
-  State<_AdminWorkerAssignmentsScreen> createState() =>
-      _AdminWorkerAssignmentsScreenState();
-}
-
-class _AdminWorkerAssignmentsScreenState
-    extends State<_AdminWorkerAssignmentsScreen> {
-  List<Map<String, dynamic>> _assignments = [];
-  List<Map<String, dynamic>> _workers = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final assigns = await Supabase.instance.client
-          .from('worker_assignments')
-          .select(
-              'id, user_id, property_id, is_active, created_at, users(first_name, last_name, email), properties(name)')
-          .eq('is_active', true)
-          .order('created_at', ascending: false);
-      final workers = await Supabase.instance.client
-          .from('users')
-          .select('id, first_name, last_name, email')
-          .eq('role', 'driver');
-      if (mounted) {
-        setState(() {
-          _assignments =
-              List<Map<String, dynamic>>.from(assigns as List);
-          _workers = List<Map<String, dynamic>>.from(workers as List);
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _removeAssignment(String id) async {
-    try {
-      await Supabase.instance.client
-          .from('worker_assignments')
-          .update({'is_active': false}).eq('id', id);
-      _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed: $e')));
-    }
-  }
-
-  Future<void> _addAssignment(
-      String userId, String propertyId) async {
-    try {
-      await Supabase.instance.client.from('worker_assignments').upsert({
-        'user_id': userId,
-        'property_id': propertyId,
-        'is_active': true,
-      }, onConflict: 'user_id,property_id');
-      _load();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Worker assigned'),
-            backgroundColor: AppColors.success),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed: $e')));
-    }
-  }
-
-  void _showAddSheet() {
-    String? workerId;
-    String? propertyId;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 28,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Add Worker Assignment',
-                  style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: workerId,
-                decoration: const InputDecoration(
-                    labelText: 'Worker',
-                    border: OutlineInputBorder()),
-                items: _workers
-                    .map((w) => DropdownMenuItem(
-                          value: w['id'].toString(),
-                          child: Text(
-                              '${w['first_name']} ${w['last_name']}',
-                              style: const TextStyle(fontSize: 14)),
-                        ))
-                    .toList(),
-                onChanged: (v) => setSheet(() => workerId = v),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: propertyId,
-                decoration: const InputDecoration(
-                    labelText: 'Property',
-                    border: OutlineInputBorder()),
-                items: widget.properties
-                    .map((p) => DropdownMenuItem(
-                          value: p['id'].toString(),
-                          child: Text(p['name'].toString(),
-                              style: const TextStyle(fontSize: 14)),
-                        ))
-                    .toList(),
-                onChanged: (v) => setSheet(() => propertyId = v),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: (workerId != null && propertyId != null)
-                    ? () {
-                        Navigator.pop(ctx);
-                        _addAssignment(workerId!, propertyId!);
-                      }
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
-                  minimumSize: const Size(double.infinity, 48),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text('Assign Worker',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text('Worker Assignments'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0.5,
-        actions: [
-          IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: _showAddSheet),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: _assignments.isEmpty
-                  ? const Center(
-                      child: Text('No active worker assignments',
-                          style: TextStyle(color: Colors.black38)))
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: _assignments.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 8),
-                      itemBuilder: (ctx, i) {
-                        final a = _assignments[i];
-                        final user = a['users'];
-                        final name = user is Map
-                            ? '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'
-                                .trim()
-                            : 'Unknown';
-                        final prop = (a['properties'] is Map)
-                            ? a['properties']['name']
-                                    ?.toString() ??
-                                '?'
-                            : '?';
-                        return Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: Colors.grey.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.engineering_outlined,
-                                  color: Color(0xFF6366F1), size: 20),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(name,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14)),
-                                    Text(prop,
-                                        style: const TextStyle(
-                                            color: Colors.black54,
-                                            fontSize: 12)),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.remove_circle_outline,
-                                    color: Colors.red, size: 20),
-                                onPressed: () => _removeAssignment(
-                                    a['id'].toString()),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-    );
-  }
-}

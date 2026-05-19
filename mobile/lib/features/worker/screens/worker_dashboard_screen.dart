@@ -34,6 +34,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
   String? _firstName;
   bool _isOnDuty = false;
   String _assignedProperty = 'No property assigned';
+  List<Map<String, String>> _assignedProperties = [];
   String? _propertyId;
   String? _activeRouteId;
   String? _activeRunId;
@@ -98,14 +99,31 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       final assignList = List<Map<String, dynamic>>.from(assigns as List);
       final names = <String>[];
       final propertyIds = <String>{};
+      final entries = <Map<String, String>>[];
       for (final row in assignList) {
-        final p = row['properties'];
-        if (p is Map && p['name'] != null) names.add('${p['name']}');
         final pid = row['property_id']?.toString();
-        if (pid != null) propertyIds.add(pid);
+        if (pid == null) continue;
+        final p = row['properties'];
+        final pname = p is Map && p['name'] != null
+            ? p['name'].toString()
+            : 'Property';
+        names.add(pname);
+        propertyIds.add(pid);
+        entries.add({'id': pid, 'name': pname});
       }
-      if (names.isNotEmpty) _assignedProperty = names.join(', ');
-      if (propertyIds.isNotEmpty) _propertyId = propertyIds.first;
+      _assignedProperties = entries;
+      if (names.isNotEmpty) {
+        _assignedProperty = names.join(', ');
+      } else {
+        _assignedProperty = 'No property assigned';
+      }
+      if (propertyIds.isNotEmpty) {
+        final keepCurrent =
+            _propertyId != null && propertyIds.contains(_propertyId);
+        if (!keepCurrent) _propertyId = propertyIds.first;
+      } else {
+        _propertyId = null;
+      }
 
       // Active route
       final routes = await client
@@ -495,6 +513,11 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return;
     final newState = !_isOnDuty;
+    if (newState && _propertyId == null) {
+      _snack(
+          'No property assigned yet. Ask your admin to assign you under Worker Assignments.');
+      return;
+    }
     setState(() {
       _isOnDuty = newState;
       _clockedInAt = newState ? DateTime.now() : null;
@@ -506,7 +529,9 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
         'property_id': _propertyId,
       });
     } catch (_) {}
-    _snack(newState ? 'You are now on duty' : 'You are now off duty');
+    _snack(newState
+        ? 'You are on duty — residents at this property will see ON DUTY'
+        : 'You are now off duty');
   }
 
   Future<void> _shareLocation() async {
@@ -667,6 +692,58 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
             ],
           ),
           const SizedBox(height: 20),
+          if (_assignedProperties.isEmpty)
+            BentoCard(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      color: AppColors.warning, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'You are not assigned to a property yet. Your admin must assign you under Tools → Worker Assignments, then pull to refresh.',
+                      style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                          height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (_assignedProperties.length > 1) ...[
+            Text(
+              'ASSIGNED PROPERTIES',
+              style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                  color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _assignedProperties.map((p) {
+                final selected = _propertyId == p['id'];
+                return ChoiceChip(
+                  label: Text(p['name'] ?? ''),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _propertyId = p['id']),
+                  selectedColor: AppColors.rlvBlue.withValues(alpha: 0.25),
+                  labelStyle: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? AppColors.rlvBlue
+                        : AppColors.textSecondary,
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+          ],
           // Bento row: donut + stats
           Row(
             children: [
