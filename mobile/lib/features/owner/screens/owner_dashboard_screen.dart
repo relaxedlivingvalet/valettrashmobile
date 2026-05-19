@@ -2,6 +2,9 @@
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/billing/property_billing.dart';
+import '../../../core/platform/csv_download_stub.dart'
+    if (dart.library.html) '../../../core/platform/csv_download_web.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/bento_card.dart';
 import '../../../core/widgets/glow_badge.dart';
@@ -34,6 +37,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   double _avgSatisfaction = 0;
   int _lastMonthCompletedComebacks = 0;
   double _lastMonthAvgSatisfaction = 0;
+
+  double _estContractRevenueMonthly = 0;
+  double _residentMrr = 0;
+  double _paidInvoicesTotal = 0;
+  double _paidComebacksTotal = 0;
+  double _contractorPayoutsTotal = 0;
+  double _portfolioRevenuePerDoor = 0;
+  int _portfolioBillableDoors = 0;
+  List<Map<String, dynamic>> _stripePayouts = [];
 
   AppColorsScheme _c = AppColorsScheme.dark;
 
@@ -97,7 +109,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       final propsRows = await client
           .from('properties')
           .select(
-              'id, name, service_window_start, service_window_end, is_active, city, state')
+              'id, name, service_window_start, service_window_end, is_active, city, state, monthly_fee_per_door, minimum_billable_occupancy_percent')
           .eq('is_active', true)
           .order('name');
 
@@ -126,6 +138,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         final unitCount = results[2] as int;
         final claimedCount =
             invites.where((i) => i['assigned_user_id'] != null).length;
+        final feePerDoor = PropertyBilling.readFeePerDoor(prop);
+        final minPct = PropertyBilling.readMinBillablePercent(prop);
+        final billableDoors = PropertyBilling.billableDoors(
+          totalUnits: unitCount,
+          occupiedUnits: residentCount,
+          minPercent: minPct,
+        );
+        final contractMonthly = PropertyBilling.monthlyContractAmount(
+          billableDoors: billableDoors,
+          feePerDoor: feePerDoor,
+        );
 
         final sw = prop['service_window_start'] ?? '18:00';
         final ew = prop['service_window_end'] ?? '22:00';
@@ -137,11 +160,130 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           'service_window': '${_fmtTime(sw)} – ${_fmtTime(ew)}',
           'unit_count': unitCount,
           'resident_count': residentCount,
+          'occupied_count': residentCount,
+          'billable_doors': billableDoors,
+          'occupancy_pct': PropertyBilling.occupancyPercent(
+            unitCount,
+            residentCount,
+          ),
+          'fee_per_door': feePerDoor,
+          'min_billable_pct': minPct,
+          'contract_monthly': contractMonthly,
+          'resident_mrr': 0.0,
+          'paid_invoices': 0.0,
+          'paid_comebacks': 0.0,
+          'total_property_revenue': contractMonthly,
+          'revenue_per_door': PropertyBilling.revenuePerBillableDoor(
+            totalRevenue: contractMonthly,
+            billableDoors: billableDoors,
+          ),
           'invite_count': invites.length,
           'claimed_count': claimedCount,
           'unclaimed_count': unitCount - residentCount,
         });
       }));
+
+      final allPropIds =
+          properties.map((p) => p['id']?.toString() ?? '').where((id) => id.isNotEmpty).toList();
+
+      if (allPropIds.isNotEmpty) {
+        final mrrByProp = <String, double>{};
+        final invoicesByProp = <String, double>{};
+        final comebacksByProp = <String, double>{};
+
+        try {
+          final subs = await client
+              .from('subscriptions')
+              .select('property_id, monthly_fee, status')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})')
+              .eq('status', 'active');
+          for (final s in subs as List) {
+            final pid = s['property_id']?.toString();
+            if (pid == null) continue;
+            mrrByProp[pid] =
+                (mrrByProp[pid] ?? 0) + ((s['monthly_fee'] as num?)?.toDouble() ?? 0);
+          }
+        } catch (_) {}
+
+        try {
+          final inv = await client
+              .from('invoices')
+              .select('property_id, amount, status')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})')
+              .eq('status', 'paid');
+          for (final i in inv as List) {
+            final pid = i['property_id']?.toString();
+            if (pid == null) continue;
+            invoicesByProp[pid] =
+                (invoicesByProp[pid] ?? 0) + ((i['amount'] as num?)?.toDouble() ?? 0);
+          }
+        } catch (_) {}
+
+        try {
+          final paidCb = await client
+              .from('missed_pickup_requests')
+              .select('payment_amount_cents, payment_status, pickups(property_id)')
+              .eq('payment_status', 'paid');
+          for (final r in paidCb as List) {
+            final pickup = r['pickups'];
+            if (pickup is! Map) continue;
+            final pid = pickup['property_id']?.toString();
+            if (pid == null || !allPropIds.contains(pid)) continue;
+            final cents = (r['payment_amount_cents'] as num?)?.toDouble() ?? 0;
+            comebacksByProp[pid] = (comebacksByProp[pid] ?? 0) + cents / 100;
+          }
+        } catch (_) {}
+
+        for (final p in properties) {
+          final pid = p['id']?.toString() ?? '';
+          final mrr = mrrByProp[pid] ?? 0;
+          final invPaid = invoicesByProp[pid] ?? 0;
+          final cbPaid = comebacksByProp[pid] ?? 0;
+          final contract = (p['contract_monthly'] as num?)?.toDouble() ?? 0;
+          final billable = p['billable_doors'] as int? ?? 0;
+          final totalRev = contract + mrr + invPaid + cbPaid;
+          p['resident_mrr'] = mrr;
+          p['paid_invoices'] = invPaid;
+          p['paid_comebacks'] = cbPaid;
+          p['total_property_revenue'] = totalRev;
+          p['revenue_per_door'] = PropertyBilling.revenuePerBillableDoor(
+            totalRevenue: totalRev,
+            billableDoors: billable,
+          );
+        }
+      }
+
+      double estContract = 0;
+      double mrrTotal = 0;
+      double invTotal = 0;
+      double cbTotal = 0;
+      int billableTotal = 0;
+      double revenueTotal = 0;
+      for (final p in properties) {
+        estContract += (p['contract_monthly'] as num?)?.toDouble() ?? 0;
+        mrrTotal += (p['resident_mrr'] as num?)?.toDouble() ?? 0;
+        invTotal += (p['paid_invoices'] as num?)?.toDouble() ?? 0;
+        cbTotal += (p['paid_comebacks'] as num?)?.toDouble() ?? 0;
+        billableTotal += p['billable_doors'] as int? ?? 0;
+        revenueTotal += (p['total_property_revenue'] as num?)?.toDouble() ?? 0;
+      }
+
+      List<Map<String, dynamic>> payouts = [];
+      double payoutSum = 0;
+      try {
+        final payoutRows = await client
+            .from('contractor_payouts')
+            .select(
+                'id, amount, status, payout_type, stripe_payout_id, created_at, properties(name)')
+            .order('created_at', ascending: false)
+            .limit(15);
+        payouts = List<Map<String, dynamic>>.from(payoutRows as List);
+        for (final row in payouts) {
+          if (row['status'] == 'paid' || row['status'] == 'processing') {
+            payoutSum += (row['amount'] as num?)?.toDouble() ?? 0;
+          }
+        }
+      } catch (_) {}
 
       properties.sort(
           (a, b) => (a['name'] as String).compareTo(b['name'] as String));
@@ -211,6 +353,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         _avgSatisfaction = avgRating;
         _lastMonthCompletedComebacks = lastMonthCb;
         _lastMonthAvgSatisfaction = lastMonthRating;
+        _estContractRevenueMonthly = estContract;
+        _residentMrr = mrrTotal;
+        _paidInvoicesTotal = invTotal;
+        _paidComebacksTotal = cbTotal;
+        _contractorPayoutsTotal = payoutSum;
+        _portfolioBillableDoors = billableTotal;
+        _portfolioRevenuePerDoor = PropertyBilling.revenuePerBillableDoor(
+          totalRevenue: revenueTotal,
+          billableDoors: billableTotal,
+        );
+        _stripePayouts = payouts;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -702,8 +855,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _buildFullPropertyCard(Map<String, dynamic> p) {
     final units = p['unit_count'] as int? ?? 0;
     final residents = p['resident_count'] as int? ?? 0;
-    final claimed = p['claimed_count'] as int? ?? 0;
-    final issued = p['invite_count'] as int? ?? 0;
     final pct = units > 0 ? residents / units : 0.0;
     final location = p['location'] as String? ?? '';
     final hasLocation = location.trim().isNotEmpty && location.trim() != ',';
@@ -756,11 +907,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _ownerMiniStat('$units', 'Units', AppColors.info),
+              _ownerMiniStat('$residents/$units', 'Occupied', AppColors.owner),
               const SizedBox(width: 8),
-              _ownerMiniStat('$residents', 'Residents', AppColors.owner),
+              _ownerMiniStat('${p['billable_doors'] ?? 0}', 'Billable', AppColors.warning),
               const SizedBox(width: 8),
-              _ownerMiniStat('$claimed/$issued', 'Codes', AppColors.warning),
+              _ownerMiniStat(
+                '\$${((p['revenue_per_door'] as num?) ?? 0).toStringAsFixed(0)}',
+                '/ door',
+                AppColors.success,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -808,32 +963,309 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   // ── Financials tab ────────────────────────────────────────────────────────────
 
   Widget _buildFinancialsTab() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.attach_money, size: 56, color: AppColors.textSecondary),
-            const SizedBox(height: 16),
-            const Text(
-              'Financials',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+    if (_loading) {
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: const [
+          SkeletonCard(height: 90),
+          SizedBox(height: 12),
+          SkeletonCard(height: 120),
+        ],
+      );
+    }
+
+    final grossMonthly = _estContractRevenueMonthly +
+        _residentMrr +
+        _paidInvoicesTotal +
+        _paidComebacksTotal;
+    final netEst = grossMonthly - _contractorPayoutsTotal;
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      color: AppColors.owner,
+      backgroundColor: _c.surface1,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        children: [
+          Text(
+            'Financials',
+            style: GoogleFonts.montserrat(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: _c.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Contract revenue uses billable doors (85% minimum occupancy rule per property). '
+            'Stripe Connect sync fills in automatically when webhooks are live.',
+            style: GoogleFonts.inter(fontSize: 12, color: _c.textSecondary, height: 1.35),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: BentoCard(
+                  height: 96,
+                  child: MetricTile(
+                    label: 'Est contract / mo',
+                    value: '\$${_estContractRevenueMonthly.toStringAsFixed(0)}',
+                    subtitle: '$_portfolioBillableDoors billable doors',
+                    valueColor: AppColors.owner,
+                  ),
+                ),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 96,
+                  child: MetricTile(
+                    label: 'Revenue / door',
+                    value: _portfolioBillableDoors > 0
+                        ? '\$${_portfolioRevenuePerDoor.toStringAsFixed(2)}'
+                        : '—',
+                    subtitle: 'All sources / billable',
+                    valueColor: AppColors.success,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: BentoCard(
+                  height: 96,
+                  child: MetricTile(
+                    label: 'Resident MRR',
+                    value: '\$${_residentMrr.toStringAsFixed(0)}',
+                    subtitle: 'Active subscriptions',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 96,
+                  child: MetricTile(
+                    label: 'Net est / mo',
+                    value: '\$${netEst.toStringAsFixed(0)}',
+                    subtitle: 'After contractor payouts',
+                    valueColor: netEst >= 0 ? AppColors.success : AppColors.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'REVENUE BY PROPERTY',
+            style: GoogleFonts.inter(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: _c.textSecondary,
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Stripe Connect payouts and revenue\nreporting will appear here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          if (_properties.isEmpty)
+            Text('No properties', style: TextStyle(color: _c.textMuted))
+          else
+            ..._properties.map(_buildFinancialPropertyCard),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'STRIPE CONNECT PAYOUTS',
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: _c.textSecondary,
+                ),
+              ),
+              TextButton(
+                onPressed: _exportFinancialsCsv,
+                child: Text(
+                  'Export CSV',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.owner),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_stripePayouts.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _c.surface1,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _c.border),
+              ),
+              child: Text(
+                'No contractor payouts recorded yet. When Stripe Connect is connected, '
+                'payout rows with stripe_payout_id will list here.',
+                style: GoogleFonts.inter(fontSize: 12, color: _c.textMuted, height: 1.35),
+              ),
+            )
+          else
+            ..._stripePayouts.map(_buildPayoutRow),
+          const SizedBox(height: 12),
+          _buildFinancialLine('Paid invoices (all time)', _paidInvoicesTotal),
+          _buildFinancialLine('Paid comebacks (all time)', _paidComebacksTotal),
+          _buildFinancialLine('Contractor payouts logged', _contractorPayoutsTotal),
+        ],
       ),
     );
+  }
+
+  Widget _buildFinancialLine(String label, double amount) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 13, color: _c.textSecondary)),
+          Text(
+            '\$${amount.toStringAsFixed(2)}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: _c.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinancialPropertyCard(Map<String, dynamic> p) {
+    final units = p['unit_count'] as int? ?? 0;
+    final occupied = p['occupied_count'] as int? ?? 0;
+    final billable = p['billable_doors'] as int? ?? 0;
+    final revPerDoor = (p['revenue_per_door'] as num?)?.toDouble() ?? 0;
+    final totalRev = (p['total_property_revenue'] as num?)?.toDouble() ?? 0;
+    final occPct = ((p['occupancy_pct'] as num? ?? 0) * 100).round();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            p['name']?.toString() ?? 'Property',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: _c.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$occupied / $units occupied ($occPct%) · $billable billable doors',
+            style: TextStyle(fontSize: 12, color: _c.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ownerMiniStat(
+                  '\$${totalRev.toStringAsFixed(0)}',
+                  'Total rev',
+                  AppColors.owner,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ownerMiniStat(
+                  '\$${revPerDoor.toStringAsFixed(2)}',
+                  '/ billable door',
+                  AppColors.success,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ownerMiniStat(
+                  '\$${(p['contract_monthly'] as num? ?? 0).toStringAsFixed(0)}',
+                  'Contract/mo',
+                  AppColors.info,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPayoutRow(Map<String, dynamic> row) {
+    final prop = row['properties'] is Map ? row['properties']['name']?.toString() : '';
+    final stripeId = row['stripe_payout_id']?.toString();
+    final status = row['status']?.toString() ?? '';
+    final amount = (row['amount'] as num?)?.toDouble() ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '\$${amount.toStringAsFixed(2)} · ${row['payout_type'] ?? 'payout'}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _c.textPrimary,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  [if (prop != null && prop.isNotEmpty) prop, status, if (stripeId != null) 'Stripe ✓']
+                      .join(' · '),
+                  style: TextStyle(fontSize: 11, color: _c.textMuted),
+                ),
+              ],
+            ),
+          ),
+          GlowBadge(
+            label: status,
+            accent: status == 'paid' ? AppColors.success : AppColors.warning,
+            showDot: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _exportFinancialsCsv() {
+    final buf = StringBuffer();
+    buf.writeln(
+      'Property,Total Units,Occupied,Billable Doors,Occupancy %,Fee Per Door,Contract Monthly,Resident MRR,Paid Invoices,Paid Comebacks,Total Revenue,Revenue Per Billable Door',
+    );
+    for (final p in _properties) {
+      final occ = ((p['occupancy_pct'] as num? ?? 0) * 100).toStringAsFixed(1);
+      buf.writeln(
+        '"${p['name']}",${p['unit_count']},${p['occupied_count']},${p['billable_doors']},$occ,'
+        '${p['fee_per_door']},${p['contract_monthly']},${p['resident_mrr']},${p['paid_invoices']},'
+        '${p['paid_comebacks']},${p['total_property_revenue']},${p['revenue_per_door']}',
+      );
+    }
+    downloadCsv(buf.toString(), 'owner_financials_by_property.csv');
   }
 
   // ── More tab ──────────────────────────────────────────────────────────────────

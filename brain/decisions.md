@@ -53,6 +53,22 @@
 - **Alternatives Considered**: Keep polling `nightly_runs` — rejected per client spec.
 - **Impact**: Header shows ON DUTY vs SCHEDULED; requires worker to use clock in on worker dashboard.
 
+### 2026-05-19
+- **Decision**: Property manager **billable doors** = `max(occupied, ceil(total_units × 0.85))`; stored defaults on `properties.minimum_billable_occupancy_percent` and `monthly_fee_per_door`.
+- **Reason**: Client contract — PM pays for at least 85% of doors regardless of actual move-ins.
+- **Alternatives Considered**: Bill only occupied units — rejected per client.
+- **Impact**: `PropertyBilling` helper; PM Properties tab + owner Financials; migration `010`.
+
+### 2026-05-19
+- **Decision**: Resident invite codes flow **super admin → Supabase → PM read-only**; PM exports CSV for distribution; residents use **Resident** signup (not Staff).
+- **Reason**: Clear separation of staff vs resident onboarding; no push/email pipeline yet.
+- **Impact**: `brain/resident_invite_workflow.md`; PM export; admin `use_count` column fix.
+
+### 2026-05-19
+- **Decision**: `RoleHome` **polls** `users.role` after auth instead of defaulting to `resident` on first null row.
+- **Reason**: Race between `auth.signUp` and `register_staff_with_invite` left staff users on resident dashboard.
+- **Impact**: `fetchUserRole()` in `user_profile.dart`.
+
 ### 2026-05-18
 - **Decision**: Resident bottom nav uses **`IndexedStack`**; service grids use **fixed-height** `ExtraServicesGrid` instead of `shrinkWrap` `GridView` inside `ListView`.
 - **Reason**: Tab switches caused extra-service tiles to paint across the screen.

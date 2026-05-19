@@ -15,7 +15,11 @@
 - [x] **Apply migration `007_service_requests.sql`** — applied live May 18 via Supabase MCP (also added `owner` to `user_role` enum). Test: resident Extra Services submit → Admin/Owner inbox.
 - [x] **Apply migration `008_resident_comeback_balance_service_time.sql`** — applied live May 18 via Supabase MCP (`resident_comeback_balance_service_time`).
 - [x] **Apply migration `009_staff_invites.sql`** — applied live May 19 via Supabase MCP (`staff_invites`).
-- [ ] **Staff invite QA** — super admin generates code → Staff signup → lands on correct role dashboard with property linked.
+- [x] **Apply migration `010_property_billing_metrics.sql`** — applied live May 19 (`monthly_fee_per_door`, `minimum_billable_occupancy_percent`).
+- [ ] **Staff invite QA** — super admin generates code → Staff signup → lands on correct role dashboard (sign out/in if cached wrong role).
+- [ ] **Owner Financials QA** — per-property revenue/door, export CSV, Stripe payout section when data exists.
+- [ ] **PM occupancy billing QA** — vacant/occupied per unit; billable ≥ 85% of total units; export unit codes CSV.
+- [ ] **Onboard a property end-to-end** — follow `brain/resident_invite_workflow.md` (units → codes → PM export → resident signup).
 - [ ] **Re-enable RLS on core tables** — MCP security advisor: 19 `public` tables have RLS off; `users`, `properties`, `resident_units`, `missed_pickup_requests`, `worker_assignments` have policies defined but RLS disabled. Run remediation from dashboard Database Linter or match repo migration SQL; test resident signup + admin flows after each batch.
 - [ ] **Production Supabase config** — when deploying to a real domain:
   - Update Site URL from `http://localhost:8091` to `https://yourdomain.com`
@@ -28,12 +32,16 @@
 ## QA (in progress)
 
 - [ ] **Resident dashboard retest** — use checklist in `brain/current_state.md` (tabs, bell, countdown, clock-in status, comebacks, extra service → inbox)
-- [x] **Commit & push** resident Session 15 — `a53e5e4` on `main` (May 19, 2026)
+- [x] **Commit & push** staff invites — `2a996f7` on `main` (May 19, 2026)
+- [ ] **Commit & push** owner financials + PM billing + invite playbook (this session)
 
 ---
 
 ## Next Features (prioritized)
 
+- [ ] **Super admin: edit `monthly_fee_per_door` and 85% per property** — UI on Add Property or property detail
+- [ ] **Bulk unit import + bulk invite code generate** — CSV upload for apartment unit lists
+- [ ] **Stripe Connect webhooks** — populate `contractor_payouts`, subscriptions, invoices from live Stripe
 - [ ] **Stripe paid comeback requests + pickup packs** — `ResidentComebackRequestScreen` and `BuyExtraPickupsSection` record DB state; wire Stripe Checkout + webhook. Blocked on Stripe account + webhook secret.
 - [ ] **Push notifications** — defer until native build is in TestFlight / Play Store internal testing:
   - Android: FCM (Firebase Cloud Messaging) — free

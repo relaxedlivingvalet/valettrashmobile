@@ -35,7 +35,7 @@ class _AdminInviteCodesScreenState extends State<AdminInviteCodesScreen> {
       var query = Supabase.instance.client
           .from('invite_codes')
           .select(
-              'id, code, property_id, unit_id, max_uses, current_uses, expires_at, is_active, properties(name), units(unit_number)');
+              'id, code, property_id, unit_id, max_uses, use_count, expires_at, is_active, properties(name), units(unit_number)');
 
       if (_propFilter != null) {
         query = query.eq('property_id', _propFilter!);
@@ -97,7 +97,7 @@ class _AdminInviteCodesScreenState extends State<AdminInviteCodesScreen> {
         'property_id': propertyId,
         'unit_id': unitId,
         'max_uses': maxUses,
-        'current_uses': 0,
+        'use_count': 0,
         'expires_at': expires,
         'is_active': true,
         'created_by': Supabase.instance.client.auth.currentUser?.id,
@@ -358,7 +358,7 @@ class _AdminInviteCodesScreenState extends State<AdminInviteCodesScreen> {
                                 ? 'Unit ${c['units']['unit_number']}'
                                 : '?';
                             final uses =
-                                '${c['current_uses'] ?? 0}/${c['max_uses'] ?? 0} uses';
+                                '${c['use_count'] ?? 0}/${c['max_uses'] ?? 0} uses';
                             final active = c['is_active'] == true;
                             final expStr = _fmtDate(
                                 c['expires_at']?.toString() ?? '');

@@ -5,6 +5,29 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Brain refresh + GitHub push (financials, billing, invites)
+
+- **Updated**: `current_state.md`, `next_steps.md`, `decisions.md`, `resident_invite_workflow.md`
+- **Pushed**: owner Financials, PM occupancy/85% billing, staff role poll fix, invite playbook, migration 010
+
+### 2026-05-19 — Owner financials + PM occupancy billing (85% rule)
+
+- **Migration `010_property_billing_metrics`** — `monthly_fee_per_door`, `minimum_billable_occupancy_percent` (default 85%)
+- **`PropertyBilling`** helper — billable doors, revenue per door
+- **Owner Financials tab** — contract revenue, MRR, per-property revenue/door, Stripe payout list, CSV export
+- **PM dashboard** — occupied/vacant per unit, billable doors, est. monthly bill with 85% minimum copy
+
+### 2026-05-19 — Resident invite playbook + PM CSV export
+
+- **`brain/resident_invite_workflow.md`** — how codes flow super admin → DB → PM dashboard → residents
+- **PM Properties tab** — Export unit codes (CSV), per-unit copy; clarified auto-sync copy
+- **Admin invite codes** — fixed `use_count` column (was `current_uses`, broke inserts on live DB)
+
+### 2026-05-19 — Fix staff signup routing to resident dashboard
+
+- **Root cause**: `auth.signUp` created a session before `register_staff_with_invite` finished; `RoleHome` read `users` once, got no row, defaulted to `resident` (DB profile was correct — e.g. `relaxedlivingtx+824@gmail.com` as `property_manager`).
+- **Fix**: `fetchUserRole()` polls until profile exists; `RoleHome` no longer defaults to resident on missing profile; staff signup waits for role before navigating.
+
 ### 2026-05-19 — Staff invite codes (self-signup for PM / OM / driver)
 
 - **Migration `009_staff_invites`** — applied live via Supabase MCP (`staff_invites` name)

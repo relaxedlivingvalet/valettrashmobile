@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/auth/user_profile.dart';
+import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'features/admin/screens/admin_dashboard_screen.dart';
 import 'features/auth/screens/change_password_screen.dart';
@@ -48,7 +51,9 @@ class _AuthGateState extends State<AuthGate> {
         if (session == null) {
           return const SimpleAuthScreen();
         }
-        return const RoleHome();
+        return RoleHome(
+          key: ValueKey(session.user.id),
+        );
       },
     );
   }
@@ -76,33 +81,80 @@ class _RoleHomeState extends State<RoleHome> {
     if (uid == null) {
       setState(() {
         _loading = false;
-        _role = 'resident';
+        _role = null;
       });
       return;
     }
-    try {
-      final row = await Supabase.instance.client
-          .from('users')
-          .select('role')
-          .eq('id', uid)
-          .maybeSingle();
-      setState(() {
-        _role = row?['role'] as String? ?? 'resident';
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() {
-        _role = 'resident';
-        _loading = false;
-      });
-    }
+    setState(() => _loading = true);
+    final role = await fetchUserRole(uid);
+    if (!mounted) return;
+    setState(() {
+      _role = role;
+      _loading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Loading your account…',
+                style: GoogleFonts.inter(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_role == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'We could not load your profile yet.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'If you just signed up, tap Retry. Otherwise sign out and sign in again.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: _load,
+                child: const Text('Retry'),
+              ),
+              TextButton(
+                onPressed: () => Supabase.instance.client.auth.signOut(),
+                child: const Text('Sign out'),
+              ),
+            ],
+          ),
+        ),
       );
     }
     switch (_role) {

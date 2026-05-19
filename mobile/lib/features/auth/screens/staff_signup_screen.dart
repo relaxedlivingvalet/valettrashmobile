@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/auth/user_profile.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/glow_badge.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -157,6 +158,13 @@ class _StaffSignupScreenState extends State<StaffSignupScreen> {
         'p_first_name': _firstNameController.text.trim(),
         'p_last_name': _lastNameController.text.trim(),
       });
+
+      final role = await fetchUserRole(userId);
+      if (role == null) {
+        setState(() => _error =
+            'Account created but profile is still syncing. Sign in again in a moment.');
+        return;
+      }
 
       if (!mounted) return;
       final client = Supabase.instance.client;

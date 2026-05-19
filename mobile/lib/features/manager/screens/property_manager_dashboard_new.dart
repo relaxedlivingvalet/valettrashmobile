@@ -1,7 +1,11 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/billing/property_billing.dart';
+import '../../../core/platform/csv_download_stub.dart'
+    if (dart.library.html) '../../../core/platform/csv_download_web.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/bento_card.dart';
 import '../../../core/widgets/metric_tile.dart';
@@ -30,14 +34,14 @@ class _PropertyManagerDashboardNewScreenState
   int _tabIndex = 0;
 
   List<Map<String, dynamic>> _properties = [];
-  List<Map<String, dynamic>> _inviteCodes = [];
   // ignore: unused_field
   List<Map<String, dynamic>> _recentRuns = [];
   // ignore: unused_field
   String? _firstName;
   double _avgSatisfaction = 0;
   double _serviceCompliance = 0; // 0.0 – 1.0
-  int _openRequestsCount = 0;
+  int _pendingComebackCount = 0;
+  List<Map<String, dynamic>> _pendingComebacks = [];
   List<Map<String, dynamic>> _recentAnnouncements = [];
 
   AppColorsScheme _c = AppColorsScheme.dark;
@@ -125,6 +129,61 @@ class _PropertyManagerDashboardNewScreenState
         .toList();
   }
 
+  /// Units at a property with resident + resident invite code (if any).
+  Future<List<Map<String, dynamic>>> _loadPropertyUnitsOverview(
+    String propertyId,
+    List<Map<String, dynamic>> propInvites,
+  ) async {
+    final client = Supabase.instance.client;
+    final unitIds = await _unitIdsForProperty(propertyId);
+    if (unitIds.isEmpty) return [];
+
+    final unitsRows = await client
+        .from('units')
+        .select('id, unit_number')
+        .filter('id', 'in', '(${unitIds.join(',')})')
+        .eq('is_active', true)
+        .order('unit_number');
+
+    final residents = await client
+        .from('resident_units')
+        .select('unit_id, users(first_name, last_name)')
+        .eq('property_id', propertyId)
+        .eq('is_active', true);
+
+    final residentByUnit = <String, String>{};
+    for (final r in residents as List) {
+      final unitId = r['unit_id']?.toString();
+      final user = r['users'];
+      if (unitId == null || user is! Map) continue;
+      final name =
+          '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'.trim();
+      if (name.isNotEmpty) residentByUnit[unitId] = name;
+    }
+
+    final inviteByUnit = <String, Map<String, dynamic>>{};
+    for (final ic in propInvites) {
+      final unitId = ic['unit_id']?.toString();
+      if (unitId != null) inviteByUnit[unitId] = ic;
+    }
+
+    final overview = <Map<String, dynamic>>[];
+    for (final u in unitsRows as List) {
+      final unitId = u['id']?.toString() ?? '';
+      final invite = inviteByUnit[unitId];
+      final useCount = invite?['use_count'] as int? ?? 0;
+      overview.add({
+        'unit_id': unitId,
+        'unit_number': u['unit_number']?.toString() ?? '—',
+        'resident_name': residentByUnit[unitId],
+        'is_occupied': residentByUnit.containsKey(unitId),
+        'invite_code': invite?['code']?.toString(),
+        'invite_claimed': invite?['assigned_user_id'] != null || useCount > 0,
+      });
+    }
+    return overview;
+  }
+
   Future<void> _loadData() async {
     setState(() {
       _loading = true;
@@ -151,14 +210,12 @@ class _PropertyManagerDashboardNewScreenState
       final userPropsRows = await client
           .from('user_properties')
           .select(
-            'property_id, properties(id, name, service_window_start, service_window_end, is_active)',
+            'property_id, properties(id, name, service_window_start, service_window_end, is_active, monthly_fee_per_door, minimum_billable_occupancy_percent)',
           )
           .eq('user_id', uid);
 
       final rows = List<Map<String, dynamic>>.from(userPropsRows as List);
       final List<Map<String, dynamic>> properties = [];
-      final List<Map<String, dynamic>> allInviteCodes = [];
-
       for (final row in rows) {
         final propData = row['properties'];
         if (propData is! Map) continue;
@@ -173,10 +230,10 @@ class _PropertyManagerDashboardNewScreenState
               .eq('is_active', true),
           client
               .from('invite_codes')
-              .select('id, code, unit_id, assigned_user_id, use_count, max_uses')
+              .select(
+                  'id, code, unit_id, assigned_user_id, use_count, max_uses, units(unit_number)')
               .eq('property_id', propId)
-              .order('created_at', ascending: false)
-              .limit(10),
+              .order('created_at', ascending: false),
           _unitCountForProperty(propId),
           _unitIdsForProperty(propId),
         ]);
@@ -186,6 +243,26 @@ class _PropertyManagerDashboardNewScreenState
             List<Map<String, dynamic>>.from(results[1] as List);
         final unitCount = results[2] as int;
         final unitIds = results[3] as List<String>;
+        final unitsOverview =
+            await _loadPropertyUnitsOverview(propId, propInvites);
+        final occupiedCount = residentCount;
+        final minPct = PropertyBilling.readMinBillablePercent(
+            Map<String, dynamic>.from(propData));
+        final feePerDoor = PropertyBilling.readFeePerDoor(
+            Map<String, dynamic>.from(propData));
+        final billableDoors = PropertyBilling.billableDoors(
+          totalUnits: unitCount,
+          occupiedUnits: occupiedCount,
+          minPercent: minPct,
+        );
+        final occupancyPct = PropertyBilling.occupancyPercent(
+          unitCount,
+          occupiedCount,
+        );
+        final estMonthlyBill = PropertyBilling.monthlyContractAmount(
+          billableDoors: billableDoors,
+          feePerDoor: feePerDoor,
+        );
 
         int violationCount = 0;
         int comebackCount = 0;
@@ -211,20 +288,27 @@ class _PropertyManagerDashboardNewScreenState
           'comeback_count': comebackCount,
           'invite_count': propInvites.length,
           'claimed_count': propInvites
-              .where((c) => c['assigned_user_id'] != null)
+              .where((c) =>
+                  c['assigned_user_id'] != null ||
+                  ((c['use_count'] as int? ?? 0) > 0))
               .length,
+          'units_overview': unitsOverview,
+          'occupied_count': occupiedCount,
+          'billable_doors': billableDoors,
+          'occupancy_pct': occupancyPct,
+          'min_billable_pct': minPct,
+          'fee_per_door': feePerDoor,
+          'est_monthly_bill': estMonthlyBill,
         });
 
-        for (final ic in propInvites.take(6)) {
-          allInviteCodes.add({...ic, 'property_id': propId, 'property_name': propName});
-        }
       }
 
       // Load recent runs, satisfaction, compliance for assigned properties
       List<Map<String, dynamic>> recentRuns = [];
       double avgSatisfaction = 0;
       double serviceCompliance = 0;
-      int openRequestsCount = 0;
+      int pendingComebackCount = 0;
+      List<Map<String, dynamic>> pendingComebacks = [];
       List<Map<String, dynamic>> recentAnnouncements = [];
       final allPropIds = properties.map((p) => p['id'] as String).toList();
       if (allPropIds.isNotEmpty) {
@@ -256,13 +340,23 @@ class _PropertyManagerDashboardNewScreenState
           }
         } catch (_) {}
 
-        // Open requests: pending comeback requests for PM's properties
         try {
-          final openReqs = await client
+          final comebackRows = await client
               .from('missed_pickup_requests')
-              .select('id')
-              .eq('status', 'pending');
-          openRequestsCount = (openReqs as List).length;
+              .select(
+                  'id, status, requested_at, is_free, pickups(property_id, units(unit_number))')
+              .eq('status', 'pending')
+              .order('requested_at', ascending: false);
+          pendingComebacks = (comebackRows as List)
+              .where((r) {
+                final pickup = r['pickups'];
+                if (pickup is! Map) return false;
+                final pid = pickup['property_id']?.toString();
+                return pid != null && allPropIds.contains(pid);
+              })
+              .map((r) => Map<String, dynamic>.from(r as Map))
+              .toList();
+          pendingComebackCount = pendingComebacks.length;
         } catch (_) {}
 
         // Recent announcements for PM's properties
@@ -279,11 +373,11 @@ class _PropertyManagerDashboardNewScreenState
 
       setState(() {
         _properties = properties;
-        _inviteCodes = allInviteCodes;
         _recentRuns = recentRuns;
         _avgSatisfaction = avgSatisfaction;
         _serviceCompliance = serviceCompliance;
-        _openRequestsCount = openRequestsCount;
+        _pendingComebackCount = pendingComebackCount;
+        _pendingComebacks = pendingComebacks;
         _recentAnnouncements = recentAnnouncements;
       });
     } catch (e) {
@@ -309,6 +403,67 @@ class _PropertyManagerDashboardNewScreenState
     await Supabase.instance.client.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  void _exportUnitCodesCsv() {
+    final buf = StringBuffer();
+    buf.writeln(
+      'Property,Unit Number,Invite Code,Code Status,Resident,Signup Steps',
+    );
+    for (final p in _properties) {
+      final propName = p['name']?.toString() ?? '';
+      final units = List<Map<String, dynamic>>.from(
+        p['units_overview'] as List? ?? [],
+      );
+      for (final u in units) {
+        final unitNum = u['unit_number']?.toString() ?? '';
+        final code = u['invite_code']?.toString() ?? '';
+        final claimed = u['invite_claimed'] == true;
+        final resident = u['resident_name']?.toString() ?? '';
+        final status = code.isEmpty
+            ? 'No code yet'
+            : (claimed ? 'Used' : 'Open');
+        final steps = code.isEmpty
+            ? 'Ask super admin to generate a code for this unit'
+            : 'Login → Resident → select property → unit $unitNum → code $code';
+        buf.writeln(
+          '"${_csvCell(propName)}","${_csvCell(unitNum)}","${_csvCell(code)}",'
+          '"${_csvCell(status)}","${_csvCell(resident)}","${_csvCell(steps)}"',
+        );
+      }
+    }
+    if (buf.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No units to export yet')),
+      );
+      return;
+    }
+    final safeName = _properties.isNotEmpty
+        ? (_properties.first['name']?.toString() ?? 'property')
+            .replaceAll(RegExp(r'[^\w\-]+'), '_')
+        : 'property';
+    downloadCsv(
+      buf.toString(),
+      '${safeName}_resident_invite_codes.csv',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('CSV downloaded — share with residents or your team'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  String _csvCell(String value) => value.replaceAll('"', '""');
+
+  void _copyUnitCode(String unitNum, String code) {
+    Clipboard.setData(ClipboardData(text: code));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Copied code for unit $unitNum'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _openNotificationSender({String? propertyId, String mode = 'property'}) {
@@ -340,7 +495,7 @@ class _PropertyManagerDashboardNewScreenState
               items: const [
                 RoleNavItem(icon: Icons.grid_view_outlined, activeIcon: Icons.grid_view, label: 'Dashboard'),
                 RoleNavItem(icon: Icons.apartment_outlined, activeIcon: Icons.apartment, label: 'Properties'),
-                RoleNavItem(icon: Icons.inbox_outlined, activeIcon: Icons.inbox, label: 'Requests'),
+                RoleNavItem(icon: Icons.inbox_outlined, activeIcon: Icons.inbox, label: 'Inbox'),
                 RoleNavItem(icon: Icons.more_horiz, activeIcon: Icons.more_horiz, label: 'More'),
               ],
             ),
@@ -440,22 +595,14 @@ class _PropertyManagerDashboardNewScreenState
             ],
           ),
           const SizedBox(height: 20),
-          // Open Requests card
           _buildRequestCard(
-            label: 'Open Requests',
-            count: _openRequestsCount,
-            linkLabel: 'View all',
+            label: 'Pending Comebacks',
+            subtitle: 'Residents asked for a re-pickup',
+            count: _pendingComebackCount,
+            linkLabel: 'View inbox',
             onTap: () => setState(() => _tabIndex = 2),
-            countColor: _openRequestsCount > 0 ? AppColors.warning : AppColors.rlvBlue,
-          ),
-          const SizedBox(height: 12),
-          // Work Orders card (placeholder — no work_orders table yet)
-          _buildRequestCard(
-            label: 'Work Orders',
-            count: 0,
-            linkLabel: 'In Progress',
-            onTap: null,
-            countColor: _c.textPrimary,
+            countColor:
+                _pendingComebackCount > 0 ? AppColors.warning : AppColors.rlvBlue,
           ),
           const SizedBox(height: 20),
           // Announcements section
@@ -533,10 +680,11 @@ class _PropertyManagerDashboardNewScreenState
             children: [
               Expanded(
                 child: BentoCard(
-                  height: 90,
+                  height: 100,
                   child: MetricTile(
-                    label: 'Compliance',
+                    label: 'Pickup SLA',
                     value: '${(_serviceCompliance * 100).toStringAsFixed(0)}%',
+                    subtitle: 'Nightly runs completed',
                     valueColor: _serviceCompliance >= 0.9
                         ? AppColors.success
                         : _serviceCompliance >= 0.7
@@ -548,7 +696,7 @@ class _PropertyManagerDashboardNewScreenState
               const SizedBox(width: 12),
               Expanded(
                 child: BentoCard(
-                  height: 90,
+                  height: 100,
                   child: MetricTile(
                     label: 'Satisfaction',
                     value: _avgSatisfaction > 0 ? _avgSatisfaction.toStringAsFixed(1) : '--',
@@ -559,7 +707,9 @@ class _PropertyManagerDashboardNewScreenState
                             : _avgSatisfaction > 0
                                 ? AppColors.error
                                 : _c.textPrimary,
-                    subtitle: _avgSatisfaction > 0 ? '/ 5.0' : 'No ratings',
+                    subtitle: _avgSatisfaction > 0
+                        ? 'Avg resident rating / 5'
+                        : 'No ratings yet',
                   ),
                 ),
               ),
@@ -598,6 +748,7 @@ class _PropertyManagerDashboardNewScreenState
 
   Widget _buildRequestCard({
     required String label,
+    String? subtitle,
     required int count,
     required String linkLabel,
     required VoidCallback? onTap,
@@ -617,6 +768,13 @@ class _PropertyManagerDashboardNewScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label, style: GoogleFonts.inter(fontSize: 13, color: _c.textSecondary)),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(fontSize: 11, color: _c.textMuted),
+                  ),
+                ],
                 const SizedBox(height: 2),
                 Text(
                   '$count',
@@ -927,23 +1085,29 @@ class _PropertyManagerDashboardNewScreenState
             ],
           ),
           const SizedBox(height: 12),
+          _buildOccupancyBillingBanner(p),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: _miniStat(
-                    '${p['unit_count'] ?? 0}', 'Units', AppColors.info),
+                    '${p['occupied_count'] ?? p['resident_count'] ?? 0}/${p['unit_count'] ?? 0}',
+                    'Occupied',
+                    AppColors.manager),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _miniStat(
-                    '${p['resident_count'] ?? 0}', 'Residents', AppColors.manager),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _miniStat(
-                    '${p['claimed_count'] ?? 0}/${p['invite_count'] ?? 0}',
-                    'Codes',
+                    '${p['billable_doors'] ?? 0}',
+                    'Billable',
                     AppColors.warning),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _miniStat(
+                    '\$${(p['est_monthly_bill'] as num? ?? 0).toStringAsFixed(0)}',
+                    'Est / mo',
+                    AppColors.info),
               ),
             ],
           ),
@@ -992,6 +1156,42 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
+  Widget _buildOccupancyBillingBanner(Map<String, dynamic> p) {
+    final total = p['unit_count'] as int? ?? 0;
+    final occupied = p['occupied_count'] as int? ?? p['resident_count'] as int? ?? 0;
+    final billable = p['billable_doors'] as int? ?? 0;
+    final minPct = ((p['min_billable_pct'] as num? ?? 0.85) * 100).round();
+    final occPct = ((p['occupancy_pct'] as num? ?? 0) * 100).round();
+    final meetsMin = total == 0 || billable <= occupied || occupied >= (total * (p['min_billable_pct'] as num? ?? 0.85)).ceil();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: (meetsMin ? AppColors.info : AppColors.warning)
+            .withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: (meetsMin ? AppColors.info : AppColors.warning)
+              .withValues(alpha: 0.25),
+        ),
+      ),
+      child: Text(
+        total == 0
+            ? 'Add units to track occupancy and billing.'
+            : '$occupied of $total units occupied ($occPct%). '
+                'You are billed for $billable doors minimum '
+                '($minPct% of $total = ${(total * (p['min_billable_pct'] as num? ?? 0.85)).ceil()} doors, '
+                'or more if occupancy is higher).',
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          color: _c.textSecondary,
+          height: 1.35,
+        ),
+      ),
+    );
+  }
+
   Widget _miniStat(String value, String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1031,12 +1231,12 @@ class _PropertyManagerDashboardNewScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
           child: Row(
             children: [
               Expanded(
                 child: Text(
-                  'Property Services',
+                  'Units & Invite Codes',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -1053,34 +1253,45 @@ class _PropertyManagerDashboardNewScreenState
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          child: Text(
+            'Codes appear here automatically after super admin generates them in '
+            'Resident Invite Codes (same database — refresh if you just added codes).',
+            style: GoogleFonts.inter(fontSize: 12, color: _c.textSecondary, height: 1.35),
+          ),
+        ),
+        if (!_loading && _properties.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: OutlinedButton.icon(
+              onPressed: _exportUnitCodesCsv,
+              icon: const Icon(Icons.download_outlined, size: 18),
+              label: const Text('Export unit codes (CSV)'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.manager,
+                side: BorderSide(color: AppColors.manager.withValues(alpha: 0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
         if (_loading)
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                SkeletonCard(height: 66),
-                SizedBox(height: 10),
+              children: const [
                 SkeletonCard(height: 66),
                 SizedBox(height: 10),
                 SkeletonCard(height: 66),
               ],
             ),
           )
-        else if (_inviteCodes.isEmpty)
+        else if (_properties.isEmpty)
           Expanded(
             child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.vpn_key_outlined,
-                      size: 48, color: _c.textMuted),
-                  SizedBox(height: 12),
-                  Text(
-                    'No invite codes issued yet',
-                    style:
-                        TextStyle(color: _c.textMuted, fontSize: 14),
-                  ),
-                ],
+              child: Text(
+                'No properties assigned',
+                style: TextStyle(color: _c.textMuted, fontSize: 14),
               ),
             ),
           )
@@ -1090,14 +1301,14 @@ class _PropertyManagerDashboardNewScreenState
               onRefresh: _loadData,
               color: AppColors.manager,
               backgroundColor: _c.surface1,
-              child: ListView.separated(
-                padding:
-                    const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                itemCount: _inviteCodes.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 10),
-                itemBuilder: (context, i) =>
-                    _buildCodeCard(_inviteCodes[i]),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                children: [
+                  for (final p in _properties) ...[
+                    _buildPropertyUnitsSection(p),
+                    const SizedBox(height: 16),
+                  ],
+                ],
               ),
             ),
           ),
@@ -1105,26 +1316,113 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  Widget _buildCodeCard(Map<String, dynamic> item) {
-    final isUsed = item['assigned_user_id'] != null;
+  Widget _buildPropertyUnitsSection(Map<String, dynamic> property) {
+    final units = List<Map<String, dynamic>>.from(
+      property['units_overview'] as List? ?? [],
+    );
+    final propName = property['name']?.toString() ?? 'Property';
+    final total = property['unit_count'] as int? ?? units.length;
+    final occupied = property['occupied_count'] as int? ?? 0;
+    final billable = property['billable_doors'] as int? ?? 0;
+    final estBill = property['est_monthly_bill'] as num? ?? 0;
+
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _c.surface1,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _c.border),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    propName,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: _c.textPrimary,
+                    ),
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$occupied / $total occupied',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _c.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Bill $billable doors · \$${estBill.toStringAsFixed(0)}/mo',
+                      style: TextStyle(fontSize: 11, color: _c.textSecondary),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: _buildOccupancyBillingBanner(property),
+          ),
+          if (units.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Text(
+                'No units set up yet. Ask your super admin to add buildings, floors, and units, then generate invite codes per unit.',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: _c.textMuted,
+                  height: 1.35,
+                ),
+              ),
+            )
+          else
+            ...units.map((u) => _buildUnitRow(u)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnitRow(Map<String, dynamic> unit) {
+    final unitNum = unit['unit_number']?.toString() ?? '—';
+    final resident = unit['resident_name']?.toString();
+    final isOccupied = unit['is_occupied'] == true;
+    final code = unit['invite_code']?.toString();
+    final claimed = unit['invite_claimed'] == true;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: _c.border)),
+      ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: AppColors.manager.withValues(alpha: 0.12),
+              color: AppColors.manager.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.vpn_key_outlined,
-                size: 18, color: AppColors.manager),
+            child: Text(
+              unitNum,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: AppColors.manager,
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1132,30 +1430,52 @@ class _PropertyManagerDashboardNewScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item['code']?.toString() ?? '--',
+                  'Unit $unitNum',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: _c.textPrimary,
-                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
-                  item['property_name']?.toString() ?? '',
-                  style: TextStyle(
+                  isOccupied && resident != null
+                      ? 'Resident: $resident'
+                      : 'Vacant — not occupied',
+                  style: TextStyle(fontSize: 12, color: _c.textSecondary),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  code != null
+                      ? 'Signup code: $code'
+                      : 'No signup code yet (super admin generates per unit)',
+                  style: GoogleFonts.inter(
                     fontSize: 11,
-                    color: _c.textSecondary,
+                    color: code != null ? _c.textPrimary : _c.textMuted,
+                    fontWeight: code != null ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
               ],
             ),
           ),
           GlowBadge(
-            label: isUsed ? 'Claimed' : 'Active',
-            accent: isUsed ? AppColors.success : AppColors.manager,
-            showDot: !isUsed,
+            label: isOccupied ? 'Occupied' : 'Vacant',
+            accent: isOccupied ? AppColors.success : _c.textMuted,
+            showDot: isOccupied,
           ),
+          const SizedBox(width: 6),
+          if (code != null) ...[
+            IconButton(
+              tooltip: 'Copy code',
+              icon: Icon(Icons.copy_outlined, size: 20, color: _c.textSecondary),
+              onPressed: () => _copyUnitCode(unitNum, code),
+            ),
+            GlowBadge(
+              label: claimed ? 'Code used' : 'Code open',
+              accent: claimed ? AppColors.info : AppColors.manager,
+              showDot: !claimed,
+            ),
+          ],
         ],
       ),
     );
@@ -1168,9 +1488,9 @@ class _PropertyManagerDashboardNewScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
           child: Text(
-            'Open Requests',
+            'Inbox',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -1179,72 +1499,107 @@ class _PropertyManagerDashboardNewScreenState
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Text(
+            'Pending comeback pickups residents requested in the app.',
+            style: GoogleFonts.inter(fontSize: 12, color: _c.textSecondary),
+          ),
+        ),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            children: [
-              BentoCard(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('MAINTENANCE',
-                        style: GoogleFonts.inter(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.2,
-                            color: AppColors.textSecondary)),
-                    const SizedBox(height: 6),
-                    Text('Work Orders',
-                        style: GoogleFonts.montserrat(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary)),
-                    const SizedBox(height: 4),
-                    Text('Manage service requests and comeback items',
-                        style: GoogleFonts.inter(
-                            fontSize: 12, color: AppColors.textSecondary)),
-                  ],
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            color: AppColors.manager,
+            backgroundColor: _c.surface1,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              children: [
+                if (_pendingComebacks.isEmpty)
+                  _buildInboxEmpty(
+                      'No pending comeback pickups for your properties.')
+                else
+                  ..._pendingComebacks.map((r) => _buildComebackRow(r)),
+                const SizedBox(height: 24),
+                PrimaryButton(
+                  label: 'Alert All Residents',
+                  onPressed: () => _openNotificationSender(mode: 'property'),
+                  accent: AppColors.manager,
+                  icon: Icons.campaign_outlined,
                 ),
-              ),
-              const SizedBox(height: 20),
-              PrimaryButton(
-                label: 'Alert All Residents',
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const SimpleNotificationSenderScreen(
-                            initialMode: 'property'),
-                  ),
-                ),
-                accent: AppColors.manager,
-                icon: Icons.campaign_outlined,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const SimpleNotificationSenderScreen(
-                            initialMode: 'user'),
-                  ),
-                ),
-                icon: const Icon(Icons.person_outline, size: 18),
-                label: const Text('Notify Specific Resident'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _c.textSecondary,
-                  side: BorderSide(color: _c.border),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildInboxEmpty(String message) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _c.border),
+      ),
+      child: Text(
+        message,
+        style: GoogleFonts.inter(fontSize: 13, color: _c.textMuted),
+      ),
+    );
+  }
+
+  Widget _buildComebackRow(Map<String, dynamic> row) {
+    final pickup = row['pickups'];
+    String unitLabel = 'Unit —';
+    if (pickup is Map) {
+      final units = pickup['units'];
+      if (units is Map) {
+        final n = units['unit_number']?.toString();
+        if (n != null) unitLabel = 'Unit $n';
+      }
+    }
+    final isFree = row['is_free'] == true;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Comeback pickup',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _c.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  unitLabel,
+                  style: TextStyle(fontSize: 12, color: _c.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          GlowBadge(
+            label: isFree ? 'Free' : 'Paid',
+            accent: isFree ? AppColors.success : AppColors.info,
+            showDot: false,
+          ),
+        ],
+      ),
     );
   }
 
