@@ -33,7 +33,7 @@
 
 - [ ] **Resident dashboard retest** — use checklist in `brain/current_state.md` (tabs, bell, countdown, clock-in status, comebacks, extra service → inbox)
 - [x] **Commit & push** staff invites — `2a996f7` on `main` (May 19, 2026)
-- [ ] **Commit & push** owner financials + PM billing + invite playbook (this session)
+- [x] **Commit & push** owner financials + PM billing + invite playbook — `b41ae6a` on `main` (May 19, 2026)
 
 ---
 
