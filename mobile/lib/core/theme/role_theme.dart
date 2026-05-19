@@ -23,7 +23,12 @@ abstract final class RoleTheme {
     'driver'             => AppRole.worker,
     'property_manager'   => AppRole.propertyManager,
     'operations_manager' => AppRole.operationsManager,
+    'owner'              => AppRole.owner,
     'super_admin'        => AppRole.owner,
     _                    => AppRole.resident,
   };
+
+  /// Business owner — `owner` and legacy `super_admin` are the same login tier.
+  static bool isBusinessOwner(String? role) =>
+      role == 'owner' || role == 'super_admin';
 }

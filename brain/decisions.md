@@ -65,6 +65,11 @@
 - **Impact**: `brain/resident_invite_workflow.md`; PM export; admin `use_count` column fix.
 
 ### 2026-05-19
+- **Decision**: **`owner` ≡ `super_admin`** — one business-owner login tier; both route to `OwnerDashboardScreen`; Admin Portal linked from Owner → More.
+- **Reason**: Client treats company owner as single role; Financials + system setup without two separate logins.
+- **Impact**: `relaxedlivingtx@gmail.com` role `owner`; migration `013`; `brain/test_credentials.md`.
+
+### 2026-05-19
 - **Decision**: **Workforce ops on OM dashboard; labor $ on Owner** — same `clock_events` data, different UI.
 - **Reason**: OM runs nightly ops (who is on duty, hours, map); Owner approves pay and sees cost vs revenue.
 - **Alternatives Considered**: Single combined admin screen — rejected; PM does not manage payroll.

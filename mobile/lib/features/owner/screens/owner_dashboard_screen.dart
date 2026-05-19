@@ -17,6 +17,7 @@ import '../../manager/screens/manager_dashboard_screen.dart';
 import '../../manager/screens/property_manager_dashboard_new.dart';
 import '../../manager/screens/simple_notification_sender_screen.dart';
 import '../../resident/screens/resident_dashboard_screen.dart';
+import '../../admin/screens/admin_dashboard_screen.dart';
 import '../../shared/screens/service_requests_inbox_screen.dart';
 import '../../worker/screens/worker_dashboard_screen.dart';
 import 'owner_workforce_screen.dart';
@@ -1446,6 +1447,20 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       showDot: false,
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              const _OwnerSectionLabel(text: 'SYSTEM'),
+              const SizedBox(height: 12),
+              _buildRoleSwitchCard(
+                label: 'Admin Portal',
+                icon: Icons.admin_panel_settings_outlined,
+                color: AppColors.owner,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AdminDashboardScreen(),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),

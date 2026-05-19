@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/auth/user_profile.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
-import 'features/admin/screens/admin_dashboard_screen.dart';
 import 'features/auth/screens/change_password_screen.dart';
 import 'features/auth/screens/simple_auth_screen.dart';
 import 'features/manager/screens/manager_dashboard_screen.dart';
@@ -168,14 +167,10 @@ class _RoleHomeState extends State<RoleHome> {
       case 'operations_manager':
         return const ManagerDashboardScreen();
       case 'owner':
-        return Theme(
-          data: AppTheme.light,
-          child: const OwnerDashboardScreen(),
-        );
       case 'super_admin':
         return Theme(
           data: AppTheme.light,
-          child: const AdminDashboardScreen(),
+          child: const OwnerDashboardScreen(),
         );
       case 'resident':
       default:

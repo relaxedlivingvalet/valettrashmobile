@@ -6,23 +6,36 @@ App runs at: `http://localhost:8091`
 
 ---
 
+## Business owner (Owner dashboard)
+
+**Owner** and **super_admin** are the same login tier — both open the **Owner dashboard**.  
+System setup (invite codes, users, billing tools) is **More → Admin Portal**.
+
+| Email | Password | Role | Screen |
+|---|---|---|---|
+| `relaxedlivingtx@gmail.com` | `RelaxedLiving2026!` | `owner` | **Owner dashboard** (Financials, labor, portfolio) |
+| `relaxedlivingtx+owner@gmail.com` | `RelaxedLiving2026!` | `owner` | Same (optional alias; create in Supabase Auth first — see `supabase/seed_data/013_owner_test_account.md`) |
+
+Sign in with **Staff** (not Resident).
+
+---
+
 ## Staff / Internal Accounts
 
 | Email | Password | Role | Notes |
 |---|---|---|---|
-| `relaxedlivingtx@gmail.com` | `RelaxedLiving2026!` | `super_admin` | Business owner — lands on Admin Portal (5-tab dashboard) |
-| `adam.grant824+om@gmail.com` | `TestPass123!` | `operations_manager` | Test Ops Manager — lands on OM Dashboard |
-| `adam.grant824+worker@gmail.com` | `TestPass123!` | `driver` | Test Worker — lands on Worker Dashboard |
+| `adam.grant824+om@gmail.com` | `TestPass123!` | `operations_manager` | OM Dashboard — workforce, routes, live map |
+| `adam.grant824+worker@gmail.com` | `TestPass123!` | `driver` | Worker Dashboard — clock in, route |
 
 ## Customer / Resident Accounts
 
 | Email | Password | Role | Notes |
 |---|---|---|---|
-| `adam.grant824+pm@gmail.com` | `TestPass123!` | `property_manager` | Test Property Manager — lands on PM Dashboard |
-| `adam.grant824+res2@gmail.com` | `TestPass123!` | `resident` | Test Resident — unit 104, Sunset Gardens |
-| `adam.grant824+testres104@gmail.com` | `TestPass123!` | `resident` | Additional resident test account |
-| `devinbooker817@gmail.com` | *(unknown — real user)* | `resident` | Real user via resident signup flow |
-| `powellreggie23@gmail.com` | *(unknown — real user)* | `resident` | Real user via resident signup flow |
+| `adam.grant824+pm@gmail.com` | `TestPass123!` | `property_manager` | PM Dashboard |
+| `adam.grant824+res2@gmail.com` | `TestPass123!` | `resident` | Sunset Gardens unit 104 |
+| `adam.grant824+testres104@gmail.com` | `TestPass123!` | `resident` | Additional resident test |
+| `devinbooker817@gmail.com` | *(unknown)* | `resident` | Real user |
+| `powellreggie23@gmail.com` | *(unknown)* | `resident` | Real user |
 
 ## Test Data
 
@@ -36,21 +49,17 @@ App runs at: `http://localhost:8091`
 
 | Role | Screen |
 |---|---|
-| `super_admin` | `AdminDashboardScreen` (light theme) |
+| `owner` | `OwnerDashboardScreen` (light) — **primary business owner** |
+| `super_admin` | Same as `owner` (legacy enum value; use `owner` in DB for new accounts) |
 | `operations_manager` | `ManagerDashboardScreen` |
 | `property_manager` | `PropertyManagerDashboardNewScreen` |
 | `driver` | `WorkerDashboardScreen` |
 | `resident` | `ResidentDashboardScreen` |
-| `owner` | `OwnerDashboardScreen` (light theme) |
+
+Admin Portal (`AdminDashboardScreen`) is reached from **Owner → More → Admin Portal**, not a separate login.
 
 ## Notes
 
 - Supabase email confirmation is **disabled** — accounts work immediately after creation.
-- To promote any account to super_admin temporarily for admin portal testing:
-  ```sql
-  UPDATE users SET role='super_admin' WHERE email='adam.grant824+om@gmail.com';
-  -- restore with:
-  UPDATE users SET role='operations_manager' WHERE email='adam.grant824+om@gmail.com';
-  ```
-- Password reset flow: "Forgot password?" on login screen or "Change Password" in any profile tab → sends reset email → user clicks link → lands on Set New Password form.
-- Supabase Auth → URL Configuration: Site URL = `http://localhost:8091`, Redirect URL = `http://localhost:8091` (update both when deploying to production).
+- Password reset: "Forgot password?" on login or "Change Password" in profile tabs.
+- Site URL: `http://localhost:8091` (update for production).

@@ -17,6 +17,8 @@
 - [x] **Apply migration `009_staff_invites.sql`** — applied live May 19 via Supabase MCP (`staff_invites`).
 - [x] **Apply migration `010_property_billing_metrics.sql`** — applied live May 19 (`monthly_fee_per_door`, `minimum_billable_occupancy_percent`).
 - [x] **Apply migration `011_property_door_counts.sql`** — applied live May 19 (`billing_total_doors`, `billing_occupied_doors`).
+- [ ] **Apply migration `013_unify_owner_role.sql`** — set `relaxedlivingtx@gmail.com` to `owner`; optional +owner alias
+- [ ] **Owner login QA** — Staff sign-in → Owner dashboard → More → Admin Portal
 - [ ] **Apply migration `012_workforce_labor.sql`** — `hourly_rate`, clock_events/worker_locations policies, `set_worker_hourly_rate` RPC.
 - [ ] **Workforce QA** — worker clock in → OM Workforce shows ON DUTY; owner Financials shows est labor $; edit driver hourly rate.
 - [ ] **Property Billing Rates QA** — enter total/occupied/$ for Riverside Lofts; verify owner + PM dashboards match.

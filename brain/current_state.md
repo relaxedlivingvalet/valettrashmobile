@@ -59,8 +59,7 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | `driver` | `WorkerDashboardScreen` | Dark |
 | `operations_manager` | `ManagerDashboardScreen` — **Workforce & Timecards**, Live Worker Map | Dark |
 | `property_manager` | `PropertyManagerDashboardNewScreen` | Light |
-| `owner` | `OwnerDashboardScreen` | Light |
-| `super_admin` | `AdminDashboardScreen` | Light |
+| `owner` / `super_admin` | `OwnerDashboardScreen` — Admin Portal via More | Light |
 
 ### Auth / routing
 - Login: **Resident** | **Staff** buttons.

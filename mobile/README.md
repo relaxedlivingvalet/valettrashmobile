@@ -24,7 +24,8 @@ App opens at `http://localhost:8091`.
 
 | Email | Password | Role | Dashboard |
 |---|---|---|---|
-| `relaxedlivingtx@gmail.com` | `RelaxedLiving2026!` | Super Admin | Admin Portal — full system control |
+| `relaxedlivingtx@gmail.com` | `RelaxedLiving2026!` | Owner | Owner dashboard — Financials, labor; **More → Admin Portal** for setup |
+| `relaxedlivingtx+owner@gmail.com` | `RelaxedLiving2026!` | Owner | Optional alias (create in Supabase Auth first) |
 | `adam.grant824+om@gmail.com` | `TestPass123!` | Operations Manager | OM Dashboard — communities, routes, on-time % |
 | `adam.grant824+pm@gmail.com` | `TestPass123!` | Property Manager | PM Dashboard — properties, requests, announcements |
 | `adam.grant824+worker@gmail.com` | `TestPass123!` | Worker / Driver | Worker Dashboard — route, stops, earnings |
@@ -36,15 +37,13 @@ App opens at `http://localhost:8091`.
 
 ## Feature Guide by Role
 
-### Super Admin (`relaxedlivingtx@gmail.com`)
+### Owner (`relaxedlivingtx@gmail.com`)
 
-Business owner account. Five-tab admin portal:
+Business owner account (`owner` and legacy `super_admin` are the same). Sign in with **Staff**.
 
-1. **Users** — all accounts with role pills; tap to edit role, name, email
-2. **Properties** — all properties; configure service window and comeback fee
-3. **Residents** — active unit assignments; filter by property
-4. **Concerns** — resident-submitted concerns; filter by Open / In Review / Resolved
-5. **Tools** — Invite Codes sub-screen, Comeback Requests, Worker Assignments, Sign Out
+**Owner dashboard:** Overview, Financials (revenue, labor from clock), Reports, More.
+
+**Admin Portal** (More → Admin Portal): Users, Properties, Residents, Concerns, Tools (invite codes, billing rates, assignments).
 
 ---
 

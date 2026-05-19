@@ -30,8 +30,18 @@ void main() {
       expect(RoleTheme.fromString('operations_manager'), AppRole.operationsManager);
     });
 
+    test('maps owner string', () {
+      expect(RoleTheme.fromString('owner'), AppRole.owner);
+    });
+
     test('maps super_admin string to owner role', () {
       expect(RoleTheme.fromString('super_admin'), AppRole.owner);
+    });
+
+    test('isBusinessOwner treats owner and super_admin as same', () {
+      expect(RoleTheme.isBusinessOwner('owner'), isTrue);
+      expect(RoleTheme.isBusinessOwner('super_admin'), isTrue);
+      expect(RoleTheme.isBusinessOwner('driver'), isFalse);
     });
 
     test('unknown string defaults to resident', () {

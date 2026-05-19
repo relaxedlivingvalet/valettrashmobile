@@ -5,6 +5,13 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Unify owner and super_admin login
+
+- **`owner` and `super_admin`** both route to **Owner dashboard**; Admin Portal from More
+- **Owner login:** `relaxedlivingtx@gmail.com` / `RelaxedLiving2026!` (Staff sign-in)
+- Optional alias `relaxedlivingtx+owner@gmail.com`; migration `013_unify_owner_role.sql`
+- `RoleTheme.fromString('owner')` fix; admin role picker includes `owner`
+
 ### 2026-05-19 — Workforce: OM timecards + owner labor estimates
 
 - **`ClockHours`** helper — shift pairing, week/month hour totals, labor cost

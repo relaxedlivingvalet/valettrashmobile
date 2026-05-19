@@ -20,6 +20,7 @@ const _kRoles = [
   'driver',
   'property_manager',
   'operations_manager',
+  'owner',
   'super_admin',
 ];
 
@@ -28,7 +29,8 @@ const _kRoleLabels = {
   'driver': 'Worker/Driver',
   'property_manager': 'Property Manager',
   'operations_manager': 'Operations Manager',
-  'super_admin': 'Super Admin',
+  'owner': 'Owner',
+  'super_admin': 'Owner (legacy)',
 };
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -406,7 +408,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   _userRoleFilter == 'operations_manager',
                   () =>
                       setState(() => _userRoleFilter = 'operations_manager')),
-              _filterChip(c, 'Super Admin', _userRoleFilter == 'super_admin',
+              _filterChip(c, 'Owner', _userRoleFilter == 'owner',
+                  () => setState(() => _userRoleFilter = 'owner')),
+              _filterChip(c, 'Owner (legacy)', _userRoleFilter == 'super_admin',
                   () => setState(() => _userRoleFilter = 'super_admin')),
             ],
           ),
