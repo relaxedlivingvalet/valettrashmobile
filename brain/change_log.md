@@ -5,7 +5,7 @@ Date | Change | Files Modified | Reason
 
 ---
 
-### 2026-05-19 — GitHub push billing door counts (`pending commit`)
+### 2026-05-19 — GitHub push billing door counts (`48ec1cf`)
 
 - Door-count billing UI, migration 011, brain refresh
 
