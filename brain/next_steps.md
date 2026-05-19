@@ -22,7 +22,7 @@
 
 ## Next Features (prioritized)
 
-- [ ] **Stripe paid comeback requests** — in-app UI placeholder already exists; blocked on Stripe account + webhook secret. Once you have those, wire `stripe_checkout` into `ResidentComebackRequestScreen`
+- [ ] **Stripe paid comeback requests** — comeback card is now on resident Home tab; `ResidentComebackRequestScreen` already handles free/paid branching. Blocked on Stripe account + webhook secret. Once you have those, wire `stripe_checkout` into the paid path of `ResidentComebackRequestScreen`
 - [ ] **Push notifications** — defer until native build is in TestFlight / Play Store internal testing:
   - Android: FCM (Firebase Cloud Messaging) — free
   - iOS: APNs via FCM or OneSignal — requires Apple Developer account
@@ -52,3 +52,6 @@ All prior work is complete and documented in `brain/change_log.md`. Summary:
 | 8 | Comeback request flow, resident concerns, admin portal (5 tabs), admin RLS |
 | 9 | super_admin account, password reset + visibility toggle (all dashboards), Supabase URL config |
 | 10 | Owner routing fix, Android + iOS platform setup, permissions, signing, icons, splash, deep links |
+| 11 | Owner handoff README rewrite, keystore committed |
+| 12 | Full dashboard rebuild — RLV brand spec, BentoCard system, fl_chart, realtime DMs |
+| 13 | Brand mockup pixel-alignment (all 5 dashboards), comeback card restored, lint cleanup |

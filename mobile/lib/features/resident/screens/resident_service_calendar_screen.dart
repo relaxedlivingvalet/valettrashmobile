@@ -1,5 +1,4 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ResidentServiceCalendarScreen extends StatefulWidget {
   const ResidentServiceCalendarScreen({super.key});
@@ -154,7 +153,6 @@ class _ResidentServiceCalendarScreenState extends State<ResidentServiceCalendarS
   List<Widget> _buildCalendarDays() {
     final days = <Widget>[];
     final firstDayOfMonth = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
-    final lastDayOfMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0);
     final startDate = firstDayOfMonth.subtract(Duration(days: firstDayOfMonth.weekday % 7));
 
     // Day headers

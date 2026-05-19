@@ -2,28 +2,31 @@ import 'package:flutter/material.dart';
 
 abstract final class AppColors {
   // ── Surfaces ─────────────────────────────────────────────────────────
-  static const Color background   = Color(0xFF08090C);
-  static const Color surface1     = Color(0xFF0F1014);
-  static const Color surface2     = Color(0xFF161820);
-  static const Color border       = Color(0xFF1E2128);
-  static const Color borderSubtle = Color(0xFF13141A);
+  static const Color background   = Color(0xFF0A0A0A);
+  static const Color surface1     = Color(0xFF1A1A1A);
+  static const Color surface2     = Color(0xFF3A3A3A);
+  static const Color border       = Color(0xFF3A3A3A);
+  static const Color borderSubtle = Color(0xFF1A1A1A);
 
   // ── Text ─────────────────────────────────────────────────────────────
-  static const Color textPrimary   = Color(0xFFF0F0F8);
-  static const Color textSecondary = Color(0xFF8B8B9E);
-  static const Color textMuted     = Color(0xFF4A4A5A);
+  static const Color textPrimary   = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFF6B6B6B);
+  static const Color textMuted     = Color(0xFFE5E5E5);
 
-  // ── Role accents ─────────────────────────────────────────────────────
-  static const Color resident = Color(0xFF10B981); // emerald
-  static const Color worker   = Color(0xFFF59E0B); // amber
-  static const Color manager  = Color(0xFF6366F1); // indigo
-  static const Color owner    = Color(0xFFA855F7); // purple
+  // ── Brand ─────────────────────────────────────────────────────────────
+  static const Color rlvBlue = Color(0xFF0A84FF);
+
+  // ── Role accents (all unified to brand blue) ──────────────────────────
+  static const Color resident = rlvBlue;
+  static const Color worker   = rlvBlue;
+  static const Color manager  = rlvBlue;
+  static const Color owner    = rlvBlue;
 
   // ── Semantic ─────────────────────────────────────────────────────────
   static const Color success  = Color(0xFF10B981);
   static const Color warning  = Color(0xFFF59E0B);
   static const Color error    = Color(0xFFEF4444);
-  static const Color info     = Color(0xFF38BDF8);
+  static const Color info     = Color(0xFF0A84FF);
 }
 
 // ── Per-role theme extension ──────────────────────────────────────────────────
@@ -53,14 +56,14 @@ class AppColorsScheme extends ThemeExtension<AppColorsScheme> {
   final Color textMuted;
 
   static const dark = AppColorsScheme(
-    background:    Color(0xFF08090C),
-    surface1:      Color(0xFF0F1014),
-    surface2:      Color(0xFF161820),
-    border:        Color(0xFF1E2128),
-    borderSubtle:  Color(0xFF13141A),
-    textPrimary:   Color(0xFFF0F0F8),
-    textSecondary: Color(0xFF8B8B9E),
-    textMuted:     Color(0xFF4A4A5A),
+    background:    Color(0xFF0A0A0A),
+    surface1:      Color(0xFF1A1A1A),
+    surface2:      Color(0xFF3A3A3A),
+    border:        Color(0xFF3A3A3A),
+    borderSubtle:  Color(0xFF1A1A1A),
+    textPrimary:   Color(0xFFFFFFFF),
+    textSecondary: Color(0xFF6B6B6B),
+    textMuted:     Color(0xFFE5E5E5),
   );
 
   static const light = AppColorsScheme(

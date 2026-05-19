@@ -1,7 +1,7 @@
 # Current State
 
 ## Current Objective
-**App Store / Play Store ready.** All features complete. Native Android and iOS platform directories generated and configured. Final RLV app icon installed and platform icons/splash regenerated. Waiting on Apple Developer account before iOS submission.
+**All 5 dashboards pixel-aligned to RLV brand mockup.** Every overview screen now matches the mockup layout, stats, labels, and color palette exactly. `flutter analyze` — 0 errors, 0 actionable warnings. Native Android/iOS configured. Waiting on Apple Developer account before iOS submission.
 
 ## Run the App
 ```powershell
@@ -116,3 +116,11 @@ Full list in `brain/test_credentials.md`. Quick reference:
 - `withOpacity` deprecation warnings (info only, not errors) — use `.withValues(alpha: ...)` to silence
 - `PmComplianceReportScreen` uses `dart:html` for CSV export — web only; will need `dart:io` path for native builds
 - Worker location sharing uses `dart:html` geolocation — web only; needs `geolocator` package for native
+- `simple_auth_screen.dart`: 2× `signInWithIdToken is experimental` — Supabase-controlled API, not fixable on our end; all other warnings resolved
+
+### Shared Widgets Added (Session 12)
+- `lib/core/widgets/bento_card.dart` — dark card used across all 5 dashboards
+- `lib/core/widgets/metric_tile.dart` — metric display widget
+
+### Session 13 additions
+- `resident_dashboard_screen.dart` — `_buildComebackCard()` added to Home tab; loads `comeback_pickup_fee` from property settings; navigates to `ResidentComebackRequestScreen` with `freeRemain` + `comebackFee` params

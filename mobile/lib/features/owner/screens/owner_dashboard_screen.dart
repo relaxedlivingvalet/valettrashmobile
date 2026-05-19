@@ -1,13 +1,14 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/bento_card.dart';
 import '../../../core/widgets/glow_badge.dart';
+import '../../../core/widgets/metric_tile.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
-import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
-import '../../../core/widgets/stat_tile.dart';
 import '../../manager/screens/manager_dashboard_screen.dart';
 import '../../manager/screens/property_manager_dashboard_new.dart';
 import '../../manager/screens/simple_notification_sender_screen.dart';
@@ -28,6 +29,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   String _email = '';
 
   List<Map<String, dynamic>> _properties = [];
+  int _completedComebacks = 0;
+  double _avgSatisfaction = 0;
+  int _lastMonthCompletedComebacks = 0;
+  double _lastMonthAvgSatisfaction = 0;
 
   AppColorsScheme _c = AppColorsScheme.dark;
 
@@ -36,10 +41,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       _properties.fold(0, (s, p) => s + (p['unit_count'] as int? ?? 0));
   int get _totalResidents =>
       _properties.fold(0, (s, p) => s + (p['resident_count'] as int? ?? 0));
-  int get _totalInvitesIssued =>
-      _properties.fold(0, (s, p) => s + (p['invite_count'] as int? ?? 0));
-  int get _totalInvitesUsed =>
-      _properties.fold(0, (s, p) => s + (p['claimed_count'] as int? ?? 0));
 
   @override
   void didChangeDependencies() {
@@ -144,7 +145,72 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       properties.sort(
           (a, b) => (a['name'] as String).compareTo(b['name'] as String));
 
-      setState(() => _properties = properties);
+      // Load completed comebacks across all properties
+      int completedCb = 0;
+      double avgRating = 0;
+      if (rows.isNotEmpty) {
+        final allPropIds = rows.map((r) => r['id']?.toString() ?? '').toList();
+        try {
+          final cbRows = await client
+              .from('missed_pickup_requests')
+              .select('id')
+              .eq('status', 'completed');
+          completedCb = (cbRows as List).length;
+        } catch (_) {}
+        try {
+          final ratings = await client
+              .from('satisfaction_ratings')
+              .select('rating')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})');
+          final ratingList = (ratings as List);
+          if (ratingList.isNotEmpty) {
+            final sum = ratingList.fold<double>(
+                0, (acc, r) => acc + (r['rating'] as int? ?? 0).toDouble());
+            avgRating = sum / ratingList.length;
+          }
+        } catch (_) {}
+      }
+
+      // Month-over-month: last month's comebacks and satisfaction
+      int lastMonthCb = 0;
+      double lastMonthRating = 0;
+      try {
+        final now = DateTime.now();
+        final firstOfThisMonth = DateTime(now.year, now.month, 1).toUtc().toIso8601String();
+        final firstOfLastMonth = DateTime(now.year, now.month - 1, 1).toUtc().toIso8601String();
+
+        final allPropIds2 = properties.map((p) => p['id'] as String).toList();
+
+        final lastMonthComebacks = await client
+            .from('missed_pickup_requests')
+            .select('id')
+            .gte('completed_at', firstOfLastMonth)
+            .lt('completed_at', firstOfThisMonth)
+            .eq('status', 'completed');
+        lastMonthCb = (lastMonthComebacks as List).length;
+
+        if (allPropIds2.isNotEmpty) {
+          final lastMonthRatings = await client
+              .from('satisfaction_ratings')
+              .select('rating')
+              .filter('property_id', 'in', '(${allPropIds2.join(',')})')
+              .gte('created_at', firstOfLastMonth)
+              .lt('created_at', firstOfThisMonth);
+          final ratingList2 = lastMonthRatings as List;
+          if (ratingList2.isNotEmpty) {
+            final sum = ratingList2.fold<double>(0, (acc, r) => acc + (r['rating'] as int? ?? 0).toDouble());
+            lastMonthRating = sum / ratingList2.length;
+          }
+        }
+      } catch (_) {}
+
+      setState(() {
+        _properties = properties;
+        _completedComebacks = completedCb;
+        _avgSatisfaction = avgRating;
+        _lastMonthCompletedComebacks = lastMonthCb;
+        _lastMonthAvgSatisfaction = lastMonthRating;
+      });
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -191,19 +257,19 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   label: 'Overview',
                 ),
                 RoleNavItem(
-                  icon: Icons.apartment_outlined,
-                  activeIcon: Icons.apartment,
-                  label: 'Properties',
+                  icon: Icons.attach_money_outlined,
+                  activeIcon: Icons.attach_money,
+                  label: 'Financials',
                 ),
                 RoleNavItem(
                   icon: Icons.bar_chart_outlined,
                   activeIcon: Icons.bar_chart,
-                  label: 'Analytics',
+                  label: 'Reports',
                 ),
                 RoleNavItem(
-                  icon: Icons.settings_outlined,
-                  activeIcon: Icons.settings,
-                  label: 'Settings',
+                  icon: Icons.more_horiz,
+                  activeIcon: Icons.more_horiz,
+                  label: 'More',
                 ),
               ],
             ),
@@ -218,11 +284,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       case 0:
         return _buildOverviewTab();
       case 1:
-        return _buildPropertiesTab();
+        return _buildFinancialsTab();
       case 2:
-        return _buildAnalyticsTab();
+        return _buildReportsTab();
       default:
-        return _buildSettingsTab();
+        return _buildMoreTab();
     }
   }
 
@@ -264,46 +330,80 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     final activationRate = _totalUnits > 0
         ? '${(_totalResidents / _totalUnits * 100).toStringAsFixed(1)}%'
         : '—';
+
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppColors.owner,
       backgroundColor: _c.surface1,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: [
-          RoleHeroCard(
-            accent: AppColors.owner,
-            eyebrow: 'PORTFOLIO',
-            title:
-                '$_totalProperties Propert${_totalProperties == 1 ? 'y' : 'ies'}',
-            subtitle:
-                '$_totalResidents residents · $_totalUnits units · $activationRate activation',
-            badgeLabel: 'Owner',
-            showDot: false,
-          ),
-          const SizedBox(height: 12),
+          // Header
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              StatTile(value: '$_totalProperties', label: 'Properties'),
-              const SizedBox(width: 8),
-              StatTile(value: '$_totalUnits', label: 'Units'),
-              const SizedBox(width: 8),
-              StatTile(value: '$_totalResidents', label: 'Residents'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              StatTile(value: '$_totalInvitesIssued', label: 'Codes Issued'),
-              const SizedBox(width: 8),
-              StatTile(
-                value: '$_totalInvitesUsed',
-                label: 'Codes Used',
-                valueColor: AppColors.success,
+              Text(
+                'Portfolio Summary',
+                style: GoogleFonts.montserrat(fontSize: 20, fontWeight: FontWeight.w800, color: _c.textPrimary),
               ),
-              const SizedBox(width: 8),
-              StatTile(value: activationRate, label: 'Activation'),
+              _buildThisMonthPill(),
             ],
+          ),
+          const SizedBox(height: 20),
+          // Communities / Total Units row
+          Row(children: [
+            Expanded(child: BentoCard(height: 90, child: MetricTile(label: 'Communities', value: '$_totalProperties'))),
+            const SizedBox(width: 12),
+            Expanded(child: BentoCard(height: 90, child: MetricTile(label: 'Total Units', value: '$_totalUnits'))),
+          ]),
+          const SizedBox(height: 12),
+          // Service Savings with delta
+          _buildSavingsCard(),
+          const SizedBox(height: 12),
+          // Satisfaction with delta
+          _buildSatisfactionBento(),
+          const SizedBox(height: 12),
+          // Activation bento
+          BentoCard(
+            height: 80,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('ACTIVATION RATE',
+                        style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            color: AppColors.textSecondary)),
+                    const SizedBox(height: 4),
+                    Text(activationRate,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            height: 1.0)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('$_totalResidents residents',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                    Text('$_totalUnits units',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ],
+            ),
           ),
           if (_properties.isNotEmpty) ...[
             const SizedBox(height: 20),
@@ -317,15 +417,146 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               const SizedBox(height: 4),
               Center(
                 child: TextButton(
-                  onPressed: () => setState(() => _tabIndex = 1),
+                  onPressed: () => setState(() => _tabIndex = 2),
                   child: Text(
                     'View all ${_properties.length} properties →',
-                    style: TextStyle(color: AppColors.owner),
+                    style: const TextStyle(color: AppColors.rlvBlue),
                   ),
                 ),
               ),
             ],
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThisMonthPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('This Month', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: _c.textPrimary)),
+          const SizedBox(width: 4),
+          Icon(Icons.keyboard_arrow_down, size: 16, color: _c.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSavingsCard() {
+    final thisMonthSavings = _completedComebacks * 15;
+    final lastMonthSavings = _lastMonthCompletedComebacks * 15;
+    final delta = lastMonthSavings > 0
+        ? ((thisMonthSavings - lastMonthSavings) / lastMonthSavings * 100).round()
+        : 0;
+    final hasDelta = lastMonthSavings > 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SERVICE SAVINGS', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: _c.textSecondary)),
+                const SizedBox(height: 4),
+                Text('\$$thisMonthSavings', style: GoogleFonts.montserrat(fontSize: 32, fontWeight: FontWeight.w800, color: _c.textPrimary, height: 1.0)),
+                if (hasDelta)
+                  Text('vs last month', style: GoogleFonts.inter(fontSize: 11, color: _c.textSecondary)),
+              ],
+            ),
+          ),
+          if (hasDelta)
+            Row(
+              children: [
+                Icon(
+                  delta >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 14,
+                  color: delta >= 0 ? AppColors.success : AppColors.error,
+                ),
+                Text(
+                  '${delta.abs()}%',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: delta >= 0 ? AppColors.success : AppColors.error,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSatisfactionBento() {
+    final satisfactionDisplay = _avgSatisfaction > 0 ? _avgSatisfaction.toStringAsFixed(1) : '--';
+    final delta = (_lastMonthAvgSatisfaction > 0 && _avgSatisfaction > 0)
+        ? ((_avgSatisfaction - _lastMonthAvgSatisfaction) / _lastMonthAvgSatisfaction * 100).round()
+        : 0;
+    final hasDelta = _lastMonthAvgSatisfaction > 0 && _avgSatisfaction > 0;
+    final satisfColor = _avgSatisfaction >= 4 ? AppColors.success : _avgSatisfaction >= 3 ? AppColors.warning : _avgSatisfaction > 0 ? AppColors.error : _c.textPrimary;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('RESIDENT SATISFACTION', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: _c.textSecondary)),
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(satisfactionDisplay, style: GoogleFonts.montserrat(fontSize: 32, fontWeight: FontWeight.w800, color: satisfColor, height: 1.0)),
+                    if (_avgSatisfaction > 0) ...[
+                      const SizedBox(width: 4),
+                      Text('/ 5', style: GoogleFonts.inter(fontSize: 14, color: _c.textSecondary)),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (hasDelta)
+            Row(
+              children: [
+                Icon(
+                  delta >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 14,
+                  color: delta >= 0 ? AppColors.success : AppColors.error,
+                ),
+                Text(
+                  '${delta.abs()}%',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: delta >= 0 ? AppColors.success : AppColors.error,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -388,9 +619,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  // ── Properties tab ────────────────────────────────────────────────────────────
+  // ── Reports tab ──────────────────────────────────────────────────────────────
 
-  Widget _buildPropertiesTab() {
+  Widget _buildReportsTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -457,7 +688,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 itemCount: _properties.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (context, i) =>
                     _buildFullPropertyCard(_properties[i]),
               ),
@@ -573,205 +804,30 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  // ── Analytics tab ─────────────────────────────────────────────────────────────
+  // ── Financials tab ────────────────────────────────────────────────────────────
 
-  Widget _buildAnalyticsTab() {
-    if (_loading) {
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-        children: [
-          SkeletonCard(height: 200),
-          SizedBox(height: 16),
-          SkeletonCard(height: 160),
-        ],
-      );
-    }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-      children: [
-        RoleHeroCard(
-          accent: AppColors.owner,
-          eyebrow: 'ANALYTICS',
-          title: 'Portfolio Metrics',
-          subtitle: 'Occupancy and activation across all properties',
-          badgeLabel: 'Owner',
-          showDot: false,
-        ),
-        const SizedBox(height: 20),
-        const _OwnerSectionLabel(text: 'OCCUPANCY BY PROPERTY'),
-        const SizedBox(height: 12),
-        if (_properties.isEmpty)
-          Center(
-            child: Text(
-              'No data yet',
-              style:
-                  TextStyle(fontSize: 14, color: _c.textSecondary),
-            ),
-          )
-        else
-          ..._properties.map((p) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildOccupancyBar(p),
-              )),
-        const SizedBox(height: 20),
-        const _OwnerSectionLabel(text: 'CODE ACTIVATION RATE'),
-        const SizedBox(height: 12),
-        _buildActivationSummary(),
-      ],
-    );
-  }
-
-  Widget _buildOccupancyBar(Map<String, dynamic> p) {
-    final units = p['unit_count'] as int? ?? 0;
-    final residents = p['resident_count'] as int? ?? 0;
-    final pct = units > 0 ? residents / units : 0.0;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _c.surface1,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _c.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  p['name']?.toString() ?? 'Property',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _c.textPrimary,
-                  ),
-                ),
-              ),
-              Text(
-                '$residents / $units',
-                style: TextStyle(
-                    fontSize: 12, color: _c.textSecondary),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${(pct * 100).toStringAsFixed(0)}%',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: pct >= 0.5 ? AppColors.success : AppColors.warning,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: pct.clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: _c.border,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                pct >= 0.5 ? AppColors.success : AppColors.warning,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActivationSummary() {
-    final activationPct = _totalInvitesIssued > 0
-        ? _totalInvitesUsed / _totalInvitesIssued
-        : 0.0;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _c.surface1,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _c.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Invite Codes',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: _c.textPrimary,
-                  ),
-                ),
-              ),
-              Text(
-                '$_totalInvitesUsed / $_totalInvitesIssued used',
-                style: TextStyle(
-                    fontSize: 12, color: _c.textSecondary),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: activationPct.clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: _c.border,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(AppColors.owner),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _analyticsBadge(
-                  '$_totalInvitesUsed', 'Used', AppColors.success),
-              const SizedBox(width: 8),
-              _analyticsBadge(
-                  '${_totalInvitesIssued - _totalInvitesUsed}',
-                  'Unclaimed',
-                  _c.textMuted),
-              const SizedBox(width: 8),
-              _analyticsBadge(
-                  '${(activationPct * 100).toStringAsFixed(1)}%',
-                  'Rate',
-                  AppColors.owner),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _analyticsBadge(String value, String label, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.15)),
-        ),
+  Widget _buildFinancialsTab() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              value,
+            const Icon(Icons.attach_money, size: 56, color: AppColors.textSecondary),
+            const SizedBox(height: 16),
+            const Text(
+              'Financials',
               style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: color),
-            ),
-            Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontSize: 7,
+                fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: _c.textMuted,
-                letterSpacing: 0.8,
+                color: AppColors.textPrimary,
               ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Stripe Connect payouts and revenue\nreporting will appear here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -779,9 +835,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  // ── Settings tab ──────────────────────────────────────────────────────────────
+  // ── More tab ──────────────────────────────────────────────────────────────────
 
-  Widget _buildSettingsTab() {
+  Widget _buildMoreTab() {
     final initial = _email.isNotEmpty ? _email[0].toUpperCase() : 'O';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -789,7 +845,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         Padding(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Text(
-            'Settings',
+            'More',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,

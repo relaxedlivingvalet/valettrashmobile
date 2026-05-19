@@ -1,14 +1,15 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/bento_card.dart';
+import '../../../core/widgets/metric_tile.dart';
 import '../../auth/screens/change_password_screen.dart';
 import '../../../core/widgets/glow_badge.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
-import '../../../core/widgets/role_hero_card.dart';
 import '../../../core/widgets/skeleton_card.dart';
-import '../../../core/widgets/stat_tile.dart';
 import 'pm_compliance_report_screen.dart';
 import 'simple_notification_sender_screen.dart';
 
@@ -30,20 +31,23 @@ class _PropertyManagerDashboardNewScreenState
 
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _inviteCodes = [];
+  // ignore: unused_field
+  List<Map<String, dynamic>> _recentRuns = [];
+  // ignore: unused_field
+  String? _firstName;
+  double _avgSatisfaction = 0;
+  double _serviceCompliance = 0; // 0.0 – 1.0
+  int _openRequestsCount = 0;
+  List<Map<String, dynamic>> _recentAnnouncements = [];
 
   AppColorsScheme _c = AppColorsScheme.dark;
 
+  // ignore: unused_element
   int get _totalUnits =>
       _properties.fold(0, (s, p) => s + (p['unit_count'] as int? ?? 0));
+  // ignore: unused_element
   int get _totalResidents =>
       _properties.fold(0, (s, p) => s + (p['resident_count'] as int? ?? 0));
-  int get _totalViolations =>
-      _properties.fold(0, (s, p) => s + (p['violation_count'] as int? ?? 0));
-  int get _totalComebacks =>
-      _properties.fold(0, (s, p) => s + (p['comeback_count'] as int? ?? 0));
-  int get _claimedCodes =>
-      _inviteCodes.where((c) => c['assigned_user_id'] != null).length;
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -134,6 +138,16 @@ class _PropertyManagerDashboardNewScreenState
     }
 
     try {
+      // Profile name
+      try {
+        final profile = await client
+            .from('users')
+            .select('first_name')
+            .eq('id', uid)
+            .maybeSingle();
+        if (profile != null) _firstName = profile['first_name']?.toString();
+      } catch (_) {}
+
       final userPropsRows = await client
           .from('user_properties')
           .select(
@@ -206,9 +220,71 @@ class _PropertyManagerDashboardNewScreenState
         }
       }
 
+      // Load recent runs, satisfaction, compliance for assigned properties
+      List<Map<String, dynamic>> recentRuns = [];
+      double avgSatisfaction = 0;
+      double serviceCompliance = 0;
+      int openRequestsCount = 0;
+      List<Map<String, dynamic>> recentAnnouncements = [];
+      final allPropIds = properties.map((p) => p['id'] as String).toList();
+      if (allPropIds.isNotEmpty) {
+        try {
+          final runs = await client
+              .from('nightly_runs')
+              .select('id, run_date, status, completed_units, total_units, properties(name)')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})')
+              .order('run_date', ascending: false)
+              .limit(5);
+          recentRuns = List<Map<String, dynamic>>.from(runs as List);
+
+          // Compliance: % of completed runs out of total recent runs
+          if (recentRuns.isNotEmpty) {
+            final completed = recentRuns.where((r) => r['status'] == 'completed').length;
+            serviceCompliance = completed / recentRuns.length;
+          }
+        } catch (_) {}
+        try {
+          final ratings = await client
+              .from('satisfaction_ratings')
+              .select('rating')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})');
+          final ratingList = (ratings as List);
+          if (ratingList.isNotEmpty) {
+            final sum = ratingList.fold<double>(
+                0, (acc, r) => acc + (r['rating'] as int? ?? 0).toDouble());
+            avgSatisfaction = sum / ratingList.length;
+          }
+        } catch (_) {}
+
+        // Open requests: pending comeback requests for PM's properties
+        try {
+          final openReqs = await client
+              .from('missed_pickup_requests')
+              .select('id')
+              .eq('status', 'pending');
+          openRequestsCount = (openReqs as List).length;
+        } catch (_) {}
+
+        // Recent announcements for PM's properties
+        try {
+          final announcements = await client
+              .from('community_announcements')
+              .select('id, title, body, created_at, property_id')
+              .filter('property_id', 'in', '(${allPropIds.join(',')})')
+              .order('created_at', ascending: false)
+              .limit(3);
+          recentAnnouncements = List<Map<String, dynamic>>.from(announcements as List);
+        } catch (_) {}
+      }
+
       setState(() {
         _properties = properties;
         _inviteCodes = allInviteCodes;
+        _recentRuns = recentRuns;
+        _avgSatisfaction = avgSatisfaction;
+        _serviceCompliance = serviceCompliance;
+        _openRequestsCount = openRequestsCount;
+        _recentAnnouncements = recentAnnouncements;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -262,26 +338,10 @@ class _PropertyManagerDashboardNewScreenState
               onTap: (i) => setState(() => _tabIndex = i),
               accent: AppColors.manager,
               items: const [
-                RoleNavItem(
-                  icon: Icons.apartment_outlined,
-                  activeIcon: Icons.apartment,
-                  label: 'Portfolio',
-                ),
-                RoleNavItem(
-                  icon: Icons.people_outline,
-                  activeIcon: Icons.people,
-                  label: 'Residents',
-                ),
-                RoleNavItem(
-                  icon: Icons.notifications_outlined,
-                  activeIcon: Icons.notifications,
-                  label: 'Notify',
-                ),
-                RoleNavItem(
-                  icon: Icons.settings_outlined,
-                  activeIcon: Icons.settings,
-                  label: 'Settings',
-                ),
+                RoleNavItem(icon: Icons.grid_view_outlined, activeIcon: Icons.grid_view, label: 'Dashboard'),
+                RoleNavItem(icon: Icons.apartment_outlined, activeIcon: Icons.apartment, label: 'Properties'),
+                RoleNavItem(icon: Icons.inbox_outlined, activeIcon: Icons.inbox, label: 'Requests'),
+                RoleNavItem(icon: Icons.more_horiz, activeIcon: Icons.more_horiz, label: 'More'),
               ],
             ),
           ],
@@ -293,19 +353,19 @@ class _PropertyManagerDashboardNewScreenState
   Widget _buildTab() {
     switch (_tabIndex) {
       case 0:
-        return _buildPortfolioTab();
+        return _buildDashboardTab();
       case 1:
-        return _buildResidentsTab();
+        return _buildPropertiesTab();
       case 2:
-        return _buildNotifyTab();
+        return _buildRequestsTab();
       default:
-        return _buildSettingsTab();
+        return _buildMoreTab();
     }
   }
 
-  // ── Portfolio tab ─────────────────────────────────────────────────────────────
+  // ── Dashboard tab ─────────────────────────────────────────────────────────────
 
-  Widget _buildPortfolioTab() {
+  Widget _buildDashboardTab() {
     if (_loading) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
@@ -358,43 +418,469 @@ class _PropertyManagerDashboardNewScreenState
     }
     return RefreshIndicator(
       onRefresh: _loadData,
-      color: AppColors.manager,
+      color: AppColors.rlvBlue,
       backgroundColor: _c.surface1,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         children: [
-          RoleHeroCard(
-            accent: AppColors.manager,
-            eyebrow: 'PORTFOLIO',
-            title: '${_properties.length} Propert${_properties.length == 1 ? 'y' : 'ies'}',
-            subtitle: '$_totalResidents residents · $_totalUnits units',
-            badgeLabel: 'Property Manager',
-            showDot: false,
-          ),
-          const SizedBox(height: 12),
+          // Header
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              StatTile(value: '$_totalUnits', label: 'Units'),
-              const SizedBox(width: 8),
-              StatTile(value: '$_totalResidents', label: 'Residents'),
-              const SizedBox(width: 8),
-              StatTile(
-                value: '$_totalViolations',
-                label: 'Violations',
-                valueColor: _totalViolations > 0 ? AppColors.error : null,
+              Text(
+                'Property Manager View',
+                style: GoogleFonts.montserrat(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: _c.textPrimary,
+                ),
               ),
+              _buildAllPropertiesPill(),
             ],
           ),
           const SizedBox(height: 20),
-          ..._properties.map((p) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildPropertyCard(p),
-              )),
+          // Open Requests card
+          _buildRequestCard(
+            label: 'Open Requests',
+            count: _openRequestsCount,
+            linkLabel: 'View all',
+            onTap: () => setState(() => _tabIndex = 2),
+            countColor: _openRequestsCount > 0 ? AppColors.warning : AppColors.rlvBlue,
+          ),
+          const SizedBox(height: 12),
+          // Work Orders card (placeholder — no work_orders table yet)
+          _buildRequestCard(
+            label: 'Work Orders',
+            count: 0,
+            linkLabel: 'In Progress',
+            onTap: null,
+            countColor: _c.textPrimary,
+          ),
+          const SizedBox(height: 20),
+          // Announcements section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ANNOUNCEMENTS',
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                  color: _c.textSecondary,
+                ),
+              ),
+              if (_recentAnnouncements.isNotEmpty)
+                TextButton(
+                  onPressed: _showAnnouncementSheet,
+                  style: TextButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'New +',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.rlvBlue),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_recentAnnouncements.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _c.surface1,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _c.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.campaign_outlined, size: 20, color: _c.textSecondary),
+                  const SizedBox(width: 12),
+                  Text(
+                    'No announcements yet',
+                    style: GoogleFonts.inter(fontSize: 13, color: _c.textSecondary),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._recentAnnouncements.map((a) => _buildAnnouncementRow(a)),
+          const SizedBox(height: 20),
+          // Send Announcement button
+          SizedBox(
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: _showAnnouncementSheet,
+              icon: const Icon(Icons.campaign_outlined),
+              label: Text(
+                'Send Community Announcement',
+                style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.rlvBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+            ),
+          ),
+          // Compliance / satisfaction metrics
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: BentoCard(
+                  height: 90,
+                  child: MetricTile(
+                    label: 'Compliance',
+                    value: '${(_serviceCompliance * 100).toStringAsFixed(0)}%',
+                    valueColor: _serviceCompliance >= 0.9
+                        ? AppColors.success
+                        : _serviceCompliance >= 0.7
+                            ? AppColors.warning
+                            : AppColors.error,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BentoCard(
+                  height: 90,
+                  child: MetricTile(
+                    label: 'Satisfaction',
+                    value: _avgSatisfaction > 0 ? _avgSatisfaction.toStringAsFixed(1) : '--',
+                    valueColor: _avgSatisfaction >= 4
+                        ? AppColors.success
+                        : _avgSatisfaction >= 3
+                            ? AppColors.warning
+                            : _avgSatisfaction > 0
+                                ? AppColors.error
+                                : _c.textPrimary,
+                    subtitle: _avgSatisfaction > 0 ? '/ 5.0' : 'No ratings',
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
+  Widget _buildAllPropertiesPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'All Properties',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: _c.textPrimary,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.keyboard_arrow_down, size: 16, color: _c.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequestCard({
+    required String label,
+    required int count,
+    required String linkLabel,
+    required VoidCallback? onTap,
+    required Color countColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: GoogleFonts.inter(fontSize: 13, color: _c.textSecondary)),
+                const SizedBox(height: 2),
+                Text(
+                  '$count',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: countColor,
+                    height: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onTap != null)
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text('$linkLabel ›', style: GoogleFonts.inter(fontSize: 13, color: AppColors.rlvBlue)),
+            )
+          else
+            Text(linkLabel, style: GoogleFonts.inter(fontSize: 13, color: _c.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementRow(Map<String, dynamic> a) {
+    final title = a['title']?.toString() ?? '';
+    final body = a['body']?.toString() ?? '';
+    final createdAt = a['created_at']?.toString() ?? '';
+    String dateLabel = '';
+    try {
+      final dt = DateTime.parse(createdAt).toLocal();
+      dateLabel = '${dt.month}/${dt.day}';
+    } catch (_) {}
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _c.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _c.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _c.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (body.isNotEmpty)
+                  Text(
+                    body,
+                    style: GoogleFonts.inter(fontSize: 11, color: _c.textSecondary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          if (dateLabel.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(dateLabel, style: GoogleFonts.inter(fontSize: 11, color: _c.textSecondary)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAnnouncementSheet() async {
+    final titleCtrl = TextEditingController();
+    final bodyCtrl = TextEditingController();
+    String? selectedPropertyId =
+        _properties.isNotEmpty ? _properties.first['id'] as String? : null;
+    bool sending = false;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface1,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 28,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text('Send Announcement',
+                  style: GoogleFonts.montserrat(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 4),
+              Text('Residents will see this in their Community Updates feed',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 16),
+              if (_properties.length > 1) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: selectedPropertyId,
+                  dropdownColor: AppColors.surface2,
+                  style: GoogleFonts.inter(
+                      color: AppColors.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Property',
+                    labelStyle: GoogleFonts.inter(
+                        color: AppColors.textSecondary, fontSize: 13),
+                    filled: true,
+                    fillColor: AppColors.surface2,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                  ),
+                  items: _properties
+                      .map((p) => DropdownMenuItem<String>(
+                            value: p['id'] as String?,
+                            child: Text(p['name']?.toString() ?? ''),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setModal(() => selectedPropertyId = v),
+                ),
+                const SizedBox(height: 12),
+              ],
+              TextField(
+                controller: titleCtrl,
+                style: GoogleFonts.inter(
+                    color: AppColors.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Title',
+                  labelStyle: GoogleFonts.inter(
+                      color: AppColors.textSecondary, fontSize: 13),
+                  filled: true,
+                  fillColor: AppColors.surface2,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: bodyCtrl,
+                maxLines: 4,
+                style: GoogleFonts.inter(
+                    color: AppColors.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Message',
+                  labelStyle: GoogleFonts.inter(
+                      color: AppColors.textSecondary, fontSize: 13),
+                  filled: true,
+                  fillColor: AppColors.surface2,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: sending
+                      ? null
+                      : () async {
+                          final title = titleCtrl.text.trim();
+                          final body = bodyCtrl.text.trim();
+                          if (title.isEmpty || body.isEmpty) return;
+                          setModal(() => sending = true);
+                          try {
+                            final uid = Supabase.instance.client.auth
+                                .currentUser?.id;
+                            await Supabase.instance.client
+                                .from('community_announcements')
+                                .insert({
+                              'property_id': selectedPropertyId,
+                              'title': title,
+                              'body': body,
+                              'sent_by': uid,
+                            });
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            _snack('Announcement sent!');
+                          } catch (e) {
+                            setModal(() => sending = false);
+                            _snack('Failed to send: $e');
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.rlvBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: sending
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation(Colors.white)),
+                        )
+                      : Text('Send Announcement',
+                          style: GoogleFonts.montserrat(
+                              fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    titleCtrl.dispose();
+    bodyCtrl.dispose();
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: AppColors.surface1,
+      content: Text(msg, style: const TextStyle(color: AppColors.textPrimary)),
+    ));
+  }
+
+  // ignore: unused_element
   Widget _buildPropertyCard(Map<String, dynamic> p) {
     final violations = p['violation_count'] as int? ?? 0;
     return Container(
@@ -538,9 +1024,9 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  // ── Residents tab ─────────────────────────────────────────────────────────────
+  // ── Properties tab ───────────────────────────────────────────────────────────
 
-  Widget _buildResidentsTab() {
+  Widget _buildPropertiesTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -550,7 +1036,7 @@ class _PropertyManagerDashboardNewScreenState
             children: [
               Expanded(
                 child: Text(
-                  'Residents & Codes',
+                  'Property Services',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -560,7 +1046,7 @@ class _PropertyManagerDashboardNewScreenState
                 ),
               ),
               GlowBadge(
-                label: '$_claimedCodes / ${_inviteCodes.length} claimed',
+                label: '${_properties.length} properties',
                 accent: AppColors.manager,
                 showDot: false,
               ),
@@ -608,7 +1094,7 @@ class _PropertyManagerDashboardNewScreenState
                 padding:
                     const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 itemCount: _inviteCodes.length,
-                separatorBuilder: (_, __) =>
+                separatorBuilder: (context, index) =>
                     const SizedBox(height: 10),
                 itemBuilder: (context, i) =>
                     _buildCodeCard(_inviteCodes[i]),
@@ -675,16 +1161,16 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  // ── Notify tab ───────────────────────────────────────────────────────────────
+  // ── Requests tab ─────────────────────────────────────────────────────────────
 
-  Widget _buildNotifyTab() {
+  Widget _buildRequestsTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Text(
-            'Send Notifications',
+            'Open Requests',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -697,14 +1183,29 @@ class _PropertyManagerDashboardNewScreenState
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
-              RoleHeroCard(
-                accent: AppColors.manager,
-                eyebrow: 'COMMUNICATION',
-                title: 'Resident Alerts',
-                subtitle:
-                    'Send property-wide or individual notifications to residents',
-                badgeLabel: 'Property Manager',
-                showDot: false,
+              BentoCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('MAINTENANCE',
+                        style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            color: AppColors.textSecondary)),
+                    const SizedBox(height: 6),
+                    Text('Work Orders',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary)),
+                    const SizedBox(height: 4),
+                    Text('Manage service requests and comeback items',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
               PrimaryButton(
@@ -747,9 +1248,9 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  // ── Settings tab ──────────────────────────────────────────────────────────────
+  // ── More tab ───────────────────────────────────────────────────────────────
 
-  Widget _buildSettingsTab() {
+  Widget _buildMoreTab() {
     final initial = _email.isNotEmpty ? _email[0].toUpperCase() : 'M';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -757,7 +1258,7 @@ class _PropertyManagerDashboardNewScreenState
         Padding(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Text(
-            'Settings',
+            'More',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -884,209 +1385,4 @@ class _PropertyManagerDashboardNewScreenState
     );
   }
 
-  // ── Legacy UI helpers (kept for internal use) ────────────────────────────────
-
-  Widget _sectionCard({
-    required String title,
-    required IconData icon,
-    required Color iconColor,
-    required Widget child,
-  }) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 24),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _metricCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade700,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _inviteCodeRow(Map<String, dynamic> item) {
-    final isUsed = item['assigned_user_id'] != null;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.meeting_room, color: Colors.blue.shade700, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '${item['property_name'] ?? ''}  •  ${item['code'] ?? ''}',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: isUsed ? Colors.green.shade50 : Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isUsed
-                    ? Colors.green.shade200
-                    : Colors.orange.shade200,
-              ),
-            ),
-            child: Text(
-              isUsed ? 'Used' : 'Active',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isUsed
-                    ? Colors.green.shade700
-                    : Colors.orange.shade700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

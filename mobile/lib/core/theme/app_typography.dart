@@ -6,65 +6,64 @@ abstract final class AppTypography {
   static TextTheme get textTheme {
     final base = ThemeData.dark().textTheme;
     return base.copyWith(
-      displayLarge: GoogleFonts.dmSans(
-        fontSize: 28,
+      displayLarge: GoogleFonts.montserrat(
+        fontSize: 48,
         fontWeight: FontWeight.w800,
-        letterSpacing: -1.12,
+        letterSpacing: -1.5,
         color: AppColors.textPrimary,
       ),
-      displayMedium: GoogleFonts.dmSans(
-        fontSize: 22,
+      displayMedium: GoogleFonts.montserrat(
+        fontSize: 32,
         fontWeight: FontWeight.w800,
-        letterSpacing: -0.88,
+        letterSpacing: -1.0,
         color: AppColors.textPrimary,
       ),
-      headlineMedium: GoogleFonts.dmSans(
+      headlineMedium: GoogleFonts.montserrat(
+        fontSize: 24,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.5,
+        color: AppColors.textPrimary,
+      ),
+      headlineSmall: GoogleFonts.montserrat(
         fontSize: 20,
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.60,
+        letterSpacing: -0.3,
         color: AppColors.textPrimary,
       ),
-      headlineSmall: GoogleFonts.dmSans(
-        fontSize: 17,
+      titleLarge: GoogleFonts.montserrat(
+        fontSize: 16,
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.34,
         color: AppColors.textPrimary,
       ),
-      titleLarge: GoogleFonts.dmSans(
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.15,
-        color: AppColors.textPrimary,
-      ),
-      titleMedium: GoogleFonts.dmSans(
+      titleMedium: GoogleFonts.inter(
         fontSize: 14,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-      bodyLarge: GoogleFonts.dmSans(
-        fontSize: 15,
+      bodyLarge: GoogleFonts.inter(
+        fontSize: 16,
         fontWeight: FontWeight.w400,
         color: AppColors.textSecondary,
       ),
-      bodyMedium: GoogleFonts.dmSans(
+      bodyMedium: GoogleFonts.inter(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         color: AppColors.textSecondary,
       ),
-      bodySmall: GoogleFonts.dmSans(
+      bodySmall: GoogleFonts.inter(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: AppColors.textMuted,
       ),
-      labelLarge: GoogleFonts.dmSans(
+      labelLarge: GoogleFonts.inter(
         fontSize: 14,
         fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
-      labelSmall: GoogleFonts.dmSans(
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.2,
+      labelSmall: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.5,
         color: AppColors.textMuted,
       ),
     );

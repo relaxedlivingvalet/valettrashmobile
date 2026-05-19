@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile/core/theme/app_colors.dart';
-import 'package:mobile/core/widgets/role_bottom_nav.dart';
+import 'package:valet/core/theme/app_colors.dart';
+import 'package:valet/core/widgets/role_bottom_nav.dart';
 
 void main() {
   final items = const [

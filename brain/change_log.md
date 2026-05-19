@@ -5,6 +5,69 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-17 — Session 13: Brand mockup alignment across all 5 dashboards
+
+- **Files Modified** (5 parallel agents, no conflicts):
+  - `manager_dashboard_screen.dart` (OM) — "Operations Overview" header + Today pill; Communities/Routes stat row; large On-Time %; Missed count; Service Completion chart switched to 0-100% completion rate y-axis
+  - `worker_dashboard_screen.dart` — "Hello [name]" + "You have N stops today" header; donut center % text overlay; "N of M Stops Complete" label; Next Stop card showing next unit + property name
+  - `resident_dashboard_screen.dart` — Property name + dropdown chevron in header; bell notification icon; "All Clear / No missed collections" status when no active run
+  - `property_manager_dashboard_new.dart` — "Property Manager View" title + "All Properties" filter pill; Open Requests count card (queries pending comebacks); Work Orders placeholder; Announcements list from `community_announcements`; compliance/satisfaction moved below
+  - `owner_dashboard_screen.dart` — "Portfolio Summary" + "This Month" filter pill; Service Savings card with month-over-month % delta; Resident Satisfaction with delta; both query prior-month data from Supabase
+
+- **Colors**: All dashboards already used correct brand palette — no AppColors changes needed (#0A0A0A, #1A1A1A, #3A3A3A, #6B6B6B, #E5E5E5, #0A84FF)
+
+- **Result**: `flutter test` — All tests passed. `flutter analyze` — 0 errors, 0 new warnings in any edited file.
+
+---
+
+### 2026-05-17 — Session 13: Comeback entry point restored + lint finalization
+
+- **Files Modified**:
+  - `resident_dashboard_screen.dart` — added `_buildComebackCard()` to Home tab ListView; reads `comeback_pickup_fee` from `properties` row in `_load()`; navigates to `ResidentComebackRequestScreen(freeRemain: _freeRemain, comebackFee: _comebackFee)`; fixed `curly_braces_in_flow_control_structures` lint in `_load()` catch block; added import for `resident_comeback_request_screen.dart`
+
+- **Why**: Session 12 dashboard rebuild dropped the comeback quick-action tile that was wired in Session 8. The `ResidentComebackRequestScreen` existed but was unreachable from the UI.
+
+- **Result**: `flutter analyze lib/features/resident/screens/resident_dashboard_screen.dart` → No issues found. Resident can now tap "Request a Comeback" from the Home tab.
+
+---
+
+### 2026-05-17 — Lint cleanup: warnings + async context bugs
+
+- **Files Modified**:
+  - `admin_dashboard_screen.dart` — removed 4 unused imports (`dart:math`, `role_theme.dart`, `glow_badge.dart`, `primary_button.dart`); fixed 4× `use_build_context_synchronously` with `if (!mounted) return;` guards
+  - `resident_extra_services_screen.dart` — removed unused `supabase_flutter` import
+  - `resident_service_calendar_screen.dart` — removed unused `supabase_flutter` import + dead `lastDayOfMonth` variable
+  - `resident_services_screen.dart` — removed unused `supabase_flutter` import
+  - `property_manager_dashboard_screen.dart` — removed unused `_email` field + dead `initState` assignment block
+  - `manager_property_services_screen.dart` — removed unused `supabase_flutter` import
+
+- **Result**: `flutter analyze lib/` — 0 errors, 0 actionable warnings. Only 2 remaining warnings are `signInWithIdToken is experimental` in `simple_auth_screen.dart` (Supabase-controlled API, not fixable on our end)
+
+---
+
+### 2026-05-17 — Session 12: Full dashboard rebuild (RLV brand sheet + Supabase integration)
+
+- **Goal**: Complete rebuild of all 5 role dashboards to match brand mockups. No Stripe.
+
+- **Files Created**:
+  - `mobile/lib/core/widgets/bento_card.dart` — shared dark card (surface1 bg, 16px radius, border)
+  - `mobile/lib/core/widgets/metric_tile.dart` — label (9px Inter caps) + value (28px Montserrat w800) + optional subtitle
+
+- **Files Rebuilt** (all zero errors/warnings in `flutter analyze`):
+  - `mobile/lib/features/worker/screens/worker_dashboard_screen.dart` — Amazon Flex-style Scan tab (photo confirm OR manual mark done, flag comeback, auto-advance), fl_chart donut for stop progress, realtime direct messaging, clock in/out
+  - `mobile/lib/features/manager/screens/manager_dashboard_screen.dart` — BentoCard 2×2 metrics, fl_chart 7-day LineChart for completion trend
+  - `mobile/lib/features/owner/screens/owner_dashboard_screen.dart` — BentoCard metrics including "Earned from Comebacks" (completedComebacks × $15)
+  - `mobile/lib/features/manager/screens/property_manager_dashboard_new.dart` — community health bento grid, Send Announcement bottom sheet → community_announcements table
+  - `mobile/lib/features/resident/screens/resident_dashboard_screen.dart` — fixed subscribe() void result, isFilter → .filter(), removed unused import
+
+- **Critical v1 patterns applied everywhere**:
+  - `subscribe()` returns void — must separate from channel chain: `_channel = ...on(...); _channel?.subscribe();`
+  - `.isFilter()` is v2-only — use `.filter('col', 'is', 'null')`
+
+- **Verified**: `flutter analyze lib/` — 0 errors, 0 warnings in all 5 dashboard files; `flutter test` — All tests passed
+
+---
+
 ### 2026-05-17 — Final app icon
 
 - **Files Modified**:

@@ -1,5 +1,4 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ManagerPropertyServicesScreen extends StatefulWidget {
   const ManagerPropertyServicesScreen({super.key});

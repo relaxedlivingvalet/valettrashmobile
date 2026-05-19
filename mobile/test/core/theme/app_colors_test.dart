@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile/core/theme/app_colors.dart';
+import 'package:valet/core/theme/app_colors.dart';
 
 void main() {
   group('AppColors', () {
@@ -19,27 +19,30 @@ void main() {
       expect(s2, greaterThan(s1));
     });
 
-    test('role accent colors are distinct', () {
-      final accents = {AppColors.resident, AppColors.worker, AppColors.manager, AppColors.owner};
-      expect(accents.length, 4); // all unique
+    test('all role accents are unified to brand blue', () {
+      expect(AppColors.resident, AppColors.rlvBlue);
+      expect(AppColors.worker, AppColors.rlvBlue);
+      expect(AppColors.manager, AppColors.rlvBlue);
+      expect(AppColors.owner, AppColors.rlvBlue);
     });
 
-    test('resident accent is green-family', () {
-      expect(AppColors.resident.green, greaterThan(AppColors.resident.red));
-      expect(AppColors.resident.green, greaterThan(AppColors.resident.blue));
+    test('brand blue is a blue-dominant color', () {
+      expect(AppColors.rlvBlue.blue, greaterThan(AppColors.rlvBlue.red));
+      expect(AppColors.rlvBlue.blue, greaterThan(AppColors.rlvBlue.green));
     });
 
-    test('worker accent is amber-family', () {
-      expect(AppColors.worker.red, greaterThan(AppColors.worker.blue));
-      expect(AppColors.worker.green, greaterThan(AppColors.worker.blue));
-    });
-
-    test('text colors have correct relative luminance ordering', () {
+    test('text primary has highest luminance of text colors', () {
       final primary = AppColors.textPrimary.computeLuminance();
       final secondary = AppColors.textSecondary.computeLuminance();
       final muted = AppColors.textMuted.computeLuminance();
       expect(primary, greaterThan(secondary));
-      expect(secondary, greaterThan(muted));
+      expect(primary, greaterThan(muted));
+    });
+
+    test('semantic colors are distinct from each other', () {
+      expect(AppColors.success, isNot(AppColors.error));
+      expect(AppColors.warning, isNot(AppColors.error));
+      expect(AppColors.success, isNot(AppColors.warning));
     });
   });
 }

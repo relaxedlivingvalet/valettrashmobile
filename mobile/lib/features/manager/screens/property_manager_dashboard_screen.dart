@@ -9,8 +9,6 @@ class PropertyManagerDashboardScreen extends StatefulWidget {
 }
 
 class _PropertyManagerDashboardScreenState extends State<PropertyManagerDashboardScreen> {
-  String _email = 'No user signed in';
-  
   // Mock data for property-specific dashboard
   String _propertyName = 'Sunset Apartments';
   String _serviceWindow = '6:00 PM - 9:00 PM';
@@ -42,10 +40,6 @@ class _PropertyManagerDashboardScreenState extends State<PropertyManagerDashboar
   @override
   void initState() {
     super.initState();
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      _email = user.email ?? user.id;
-    }
   }
 
   void _showMessage(String message) {
