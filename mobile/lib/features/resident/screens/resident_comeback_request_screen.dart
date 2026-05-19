@@ -4,15 +4,22 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/lottie_feedback.dart';
 import '../../../core/widgets/primary_button.dart';
+import '../models/comeback_pricing.dart';
+
+enum _ComebackCharge { freeMonthly, freePurchased, paidSingle }
 
 class ResidentComebackRequestScreen extends StatefulWidget {
   final int freeRemain;
-  final num comebackFee;
+  final int purchasedBalance;
+  final String? propertyId;
+  final String? residentUnitId;
 
   const ResidentComebackRequestScreen({
     super.key,
     required this.freeRemain,
-    required this.comebackFee,
+    required this.purchasedBalance,
+    this.propertyId,
+    this.residentUnitId,
   });
 
   @override
@@ -25,13 +32,25 @@ class _ResidentComebackRequestScreenState
   final _notesController = TextEditingController();
   bool _submitting = false;
   bool _submitted = false;
-  bool _isPaid = false;
+
+  late final _ComebackCharge _charge;
 
   @override
   void initState() {
     super.initState();
-    _isPaid = widget.freeRemain <= 0;
+    if (widget.freeRemain > 0) {
+      _charge = _ComebackCharge.freeMonthly;
+    } else if (widget.purchasedBalance > 0) {
+      _charge = _ComebackCharge.freePurchased;
+    } else {
+      _charge = _ComebackCharge.paidSingle;
+    }
   }
+
+  bool get _isPaid => _charge == _ComebackCharge.paidSingle;
+
+  int get _singlePrice =>
+      kComebackPacks.firstWhere((p) => p.quantity == 1).priceDollars;
 
   @override
   void dispose() {
@@ -46,24 +65,30 @@ class _ResidentComebackRequestScreenState
       final uid = client.auth.currentUser?.id;
       if (uid == null) return;
 
-      // Find today's pickup for this resident
       String? pickupId;
-      String? propertyId;
+      String? propertyId = widget.propertyId;
+      String? unitRowId = widget.residentUnitId;
+      int purchasedBalance = widget.purchasedBalance;
+
       try {
         final unitRow = await client
             .from('resident_units')
-            .select('unit_id, property_id')
+            .select('id, unit_id, property_id, purchased_comeback_balance')
             .eq('user_id', uid)
             .eq('is_active', true)
             .maybeSingle();
 
         if (unitRow != null) {
-          propertyId = unitRow['property_id']?.toString();
+          unitRowId = unitRow['id']?.toString();
+          propertyId ??= unitRow['property_id']?.toString();
+          purchasedBalance =
+              unitRow['purchased_comeback_balance'] as int? ?? purchasedBalance;
           final unitId = unitRow['unit_id']?.toString();
           if (unitId != null) {
             final now = DateTime.now();
-            final todayStart =
-                DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+            final todayStart = DateTime(now.year, now.month, now.day)
+                .toUtc()
+                .toIso8601String();
             final pickup = await client
                 .from('pickups')
                 .select('id')
@@ -90,26 +115,37 @@ class _ResidentComebackRequestScreenState
         insertData['notes'] = _notesController.text.trim();
       }
       if (_isPaid) {
-        insertData['payment_amount_cents'] =
-            (widget.comebackFee * 100).round();
+        insertData['payment_amount_cents'] = _singlePrice * 100;
       }
 
       await client.from('missed_pickup_requests').insert(insertData);
 
-      // Update monthly usage for free comebacks
-      if (!_isPaid && propertyId != null) {
-        try {
-          final monthStart =
-              '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
+      if (propertyId != null) {
+        final monthStart =
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
+
+        if (_charge == _ComebackCharge.freeMonthly) {
+          final usage = await client
+              .from('resident_monthly_usage')
+              .select('free_comeback_used')
+              .eq('resident_user_id', uid)
+              .eq('property_id', propertyId)
+              .eq('month', monthStart)
+              .maybeSingle();
+          final used = usage?['free_comeback_used'] as int? ?? 0;
           await client.from('resident_monthly_usage').upsert({
             'resident_user_id': uid,
             'property_id': propertyId,
             'month': monthStart,
-            'free_comeback_used': widget.freeRemain == 0
-                ? 0
-                : (1), // server-side increment not available in v1; re-load on return
+            'free_comeback_used': used + 1,
           }, onConflict: 'resident_user_id,property_id,month');
-        } catch (_) {}
+        } else if (_charge == _ComebackCharge.freePurchased &&
+            unitRowId != null &&
+            purchasedBalance > 0) {
+          await client.from('resident_units').update({
+            'purchased_comeback_balance': purchasedBalance - 1,
+          }).eq('id', unitRowId);
+        }
       }
 
       if (mounted) setState(() => _submitted = true);
@@ -140,7 +176,7 @@ class _ResidentComebackRequestScreenState
           style: TextStyle(color: AppColors.textPrimary, fontSize: 17),
         ),
         content: Text(
-          'Online payment is being set up. Your request will be recorded and a team member will follow up to process the \$${widget.comebackFee.toStringAsFixed(0)} fee.',
+          'Online payment is being set up. Your request will be recorded and a team member will follow up to process the \$$_singlePrice fee.',
           style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
         ),
         actions: [
@@ -163,6 +199,17 @@ class _ResidentComebackRequestScreenState
     );
   }
 
+  String get _quotaMessage {
+    switch (_charge) {
+      case _ComebackCharge.freeMonthly:
+        return 'Using your free monthly comeback (${widget.freeRemain} left this month). Free comebacks do not roll over.';
+      case _ComebackCharge.freePurchased:
+        return 'Using 1 banked comeback (${widget.purchasedBalance} remaining). Purchased comebacks roll over month to month.';
+      case _ComebackCharge.paidSingle:
+        return 'No free or banked comebacks left. This request is \$$_singlePrice (or buy packs: 3 for \$14, 5 for \$20 on Extra Services).';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,7 +229,7 @@ class _ResidentComebackRequestScreenState
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, true),
         ),
       ),
       body: _submitted
@@ -200,7 +247,7 @@ class _ResidentComebackRequestScreenState
                     ),
                     const SizedBox(height: 24),
                     OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => Navigator.pop(context, true),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.resident,
                         side: const BorderSide(color: AppColors.resident),
@@ -220,7 +267,6 @@ class _ResidentComebackRequestScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Quota banner
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -247,33 +293,21 @@ class _ResidentComebackRequestScreenState
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _isPaid
-                              ? Text(
-                                  'You\'ve used your free comeback this month. Additional comebacks cost \$${widget.comebackFee.toStringAsFixed(0)} each.',
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 13,
-                                    height: 1.4,
-                                  ),
-                                )
-                              : Text(
-                                  'You have ${widget.freeRemain} free comeback${widget.freeRemain == 1 ? '' : 's'} remaining this month.',
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 13,
-                                    height: 1.4,
-                                  ),
-                                ),
+                          child: Text(
+                            _quotaMessage,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
                   _sectionLabel('ADDITIONAL NOTES (OPTIONAL)'),
                   const SizedBox(height: 10),
-
                   TextField(
                     controller: _notesController,
                     maxLines: 4,
@@ -302,14 +336,12 @@ class _ResidentComebackRequestScreenState
                       contentPadding: const EdgeInsets.all(14),
                     ),
                   ),
-
                   const SizedBox(height: 32),
-
                   if (_isPaid) ...[
                     PrimaryButton(
                       label: _submitting
                           ? 'Submitting…'
-                          : 'Pay \$${widget.comebackFee.toStringAsFixed(0)} & Request',
+                          : 'Pay \$$_singlePrice & Request',
                       accent: AppColors.warning,
                       onPressed:
                           _submitting ? null : _showPaymentPlaceholder,

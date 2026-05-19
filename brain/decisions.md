@@ -41,6 +41,29 @@
 - **Alternatives Considered**: Give authenticated users SELECT on invite_codes — rejected due to code enumeration risk.
 - **Impact**: `verify_invite_code(code, property_id, unit_number)` and `claim_invite_code(invite_id, user_id)` are the only paths to use an invite.
 
+### 2026-05-18
+- **Decision**: Resident comeback quota — **1 free per calendar month** (no rollover); **purchased** credits on `resident_units.purchased_comeback_balance` **do roll over**; paid packs **1/$5, 3/$14, 5/$20**.
+- **Reason**: Client business rules for valet trash comeback pickups.
+- **Alternatives Considered**: Property-level `free_comeback_pickups_per_month` only — rejected for resident UX in favor of fixed app constant `kMonthlyFreeComebacks = 1`.
+- **Impact**: `ResidentComebackRequestScreen` consumes free → banked → $5 single; `BuyExtraPickupsSection` increments balance (Stripe TBD).
+
+### 2026-05-18
+- **Decision**: Resident worker status from **`clock_events`** (latest event per property), not `nightly_runs.status`.
+- **Reason**: Status should reflect when the assigned worker clocks in.
+- **Alternatives Considered**: Keep polling `nightly_runs` — rejected per client spec.
+- **Impact**: Header shows ON DUTY vs SCHEDULED; requires worker to use clock in on worker dashboard.
+
+### 2026-05-18
+- **Decision**: Resident bottom nav uses **`IndexedStack`**; service grids use **fixed-height** `ExtraServicesGrid` instead of `shrinkWrap` `GridView` inside `ListView`.
+- **Reason**: Tab switches caused extra-service tiles to paint across the screen.
+- **Alternatives Considered**: Single shared grid only on Extra Services tab — partially adopted (compact grid on Home + full tab).
+- **Impact**: Stable layout; slightly more code in `extra_services_grid.dart`.
+
+### 2026-05-18
+- **Decision**: Extra service requests require **date and time**; message optional with server default text.
+- **Reason**: Submit failures and incomplete scheduling; `message` column is NOT NULL in DB.
+- **Impact**: `service_requests.preferred_time` (migration 008); owner/admin inbox shows richer requests.
+
 ### (Original — pre-migration)
 - **Decision**: Role routing at the app level — `RoleHome` queries `users.role` and pushes the correct screen.
 - **Reason**: Single Flutter codebase serves four distinct user types. Simpler than separate builds.

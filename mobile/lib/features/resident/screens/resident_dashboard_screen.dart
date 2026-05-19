@@ -11,9 +11,12 @@ import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../auth/screens/change_password_screen.dart';
-import '../widgets/service_request_sheet.dart';
+import '../models/comeback_pricing.dart';
+import '../widgets/buy_extra_pickups_section.dart';
+import '../widgets/extra_services_grid.dart';
 import 'resident_comeback_request_screen.dart';
 import 'resident_concerns_screen.dart';
+import 'resident_notifications_screen.dart';
 import 'resident_vacation_hold_screen.dart';
 
 class ResidentDashboardScreen extends StatefulWidget {
@@ -34,10 +37,11 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   String _propertyName = '';
   String _windowShort = '--';
   int _freeRemain = 0;
-  num _comebackFee = 15;
+  int _purchasedBalance = 0;
   String _freeSummary = '--';
+  String? _residentUnitId;
 
-  String? _runStatus;
+  bool _workerClockedIn = false;
   String? _propertyId;
   Timer? _statusTimer;
   Timer? _countdownTimer;
@@ -56,7 +60,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     _email = Supabase.instance.client.auth.currentUser?.email ?? '';
     _load();
     _statusTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && _propertyId != null) _pollRunStatus();
+      if (mounted && _propertyId != null) _pollWorkerClockStatus();
     });
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) _updateCountdown();
@@ -83,11 +87,24 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     }
     final diff = target.difference(now);
     final hours = diff.inHours;
-    final mins = diff.inMinutes % 60;
-    final label = hours > 0 ? '${hours}h ${mins}m' : '${mins}m';
+    final label = diff.inMinutes <= 0
+        ? 'Now'
+        : hours < 1
+            ? '<1h'
+            : '${hours}h';
     if (_countdownLabel != label && mounted) {
       setState(() => _countdownLabel = label);
     }
+  }
+
+  String get _pickupActionSubtitle {
+    if (_freeRemain > 0) {
+      return 'Free — monthly comeback ($_freeRemain left)';
+    }
+    if (_purchasedBalance > 0) {
+      return 'Free — banked comeback ($_purchasedBalance left)';
+    }
+    return 'Paid — \$5 per comeback (packs on Extra Services)';
   }
 
   String get _nextPickupDateLabel {
@@ -99,34 +116,26 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
     return '${months[now.month - 1]} ${now.day}, ${now.year}';
   }
 
-  String get _workerStatusLabel {
-    if (_runStatus == 'in_progress') return 'ON DUTY';
-    if (_runStatus == 'completed') return 'COMPLETED';
-    return 'SCHEDULED';
-  }
+  String get _workerStatusLabel =>
+      _workerClockedIn ? 'ON DUTY' : 'SCHEDULED';
 
-  Color get _workerStatusColor {
-    if (_runStatus == 'in_progress') return AppColors.success;
-    if (_runStatus == 'completed') return AppColors.textSecondary;
-    return AppColors.rlvBlue;
-  }
+  Color get _workerStatusColor =>
+      _workerClockedIn ? AppColors.success : AppColors.rlvBlue;
 
-  Future<void> _pollRunStatus() async {
+  Future<void> _pollWorkerClockStatus() async {
     if (_propertyId == null) return;
     try {
-      final now = DateTime.now();
-      final todayStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
       final row = await Supabase.instance.client
-          .from('nightly_runs')
-          .select('status')
+          .from('clock_events')
+          .select('event_type')
           .eq('property_id', _propertyId!)
-          .eq('run_date', todayStr)
+          .order('created_at', ascending: false)
+          .limit(1)
           .maybeSingle();
-      if (row == null) return;
-      final newStatus = row['status']?.toString();
-      if (newStatus != null && newStatus != _runStatus && mounted) {
-        setState(() => _runStatus = newStatus);
+      final onDuty =
+          row != null && row['event_type']?.toString() == 'clock_in';
+      if (onDuty != _workerClockedIn && mounted) {
+        setState(() => _workerClockedIn = onDuty);
       }
     } catch (_) {}
   }
@@ -157,13 +166,13 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       final assignment = await Supabase.instance.client
           .from('resident_units')
           .select('''
+              id,
               property_id,
+              purchased_comeback_balance,
               properties (
                 name,
                 service_window_start,
-                service_window_end,
-                free_comeback_pickups_per_month,
-                comeback_pickup_fee
+                service_window_end
               )
             ''')
           .eq('user_id', uid)
@@ -195,9 +204,10 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       if (prop != null && assignmentMap != null) {
         _propertyName = prop['name']?.toString() ?? '';
         _propertyId = assignmentMap['property_id']?.toString();
-        final freeCapRaw = prop['free_comeback_pickups_per_month'];
-        final freeCap =
-            freeCapRaw is int ? freeCapRaw : int.tryParse('$freeCapRaw') ?? 0;
+        _residentUnitId = assignmentMap['id']?.toString();
+        _purchasedBalance =
+            assignmentMap['purchased_comeback_balance'] as int? ?? 0;
+
         final now = DateTime.now();
         final monthStart =
             '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
@@ -207,7 +217,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
         if (pid != null) {
           usage = await Supabase.instance.client
               .from('resident_monthly_usage')
-              .select('free_comeback_used, paid_comeback_used')
+              .select('free_comeback_used')
               .eq('resident_user_id', uid)
               .eq('property_id', pid)
               .eq('month', monthStart)
@@ -216,18 +226,18 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
 
         final usedFree =
             usage == null ? 0 : (usage['free_comeback_used'] as int? ?? 0);
-        final remain = freeCap - usedFree;
-        _freeRemain =
-            remain < 0 ? 0 : (remain > freeCap ? freeCap : remain);
-        _freeSummary = freeCap <= 0
-            ? 'No free comebacks configured'
-            : '$_freeRemain of $freeCap left this month';
+        _freeRemain = (kMonthlyFreeComebacks - usedFree)
+            .clamp(0, kMonthlyFreeComebacks);
+        _freeSummary = _freeRemain > 0
+            ? '$_freeRemain free this month (resets monthly)'
+            : 'Free comeback used this month';
+        if (_purchasedBalance > 0) {
+          _freeSummary += ' · $_purchasedBalance banked';
+        }
 
-        final feeRaw = prop['comeback_pickup_fee'];
-        _comebackFee = feeRaw is num ? feeRaw : num.tryParse('$feeRaw') ?? 15;
-
-        final startT = prop['service_window_start'];
-        final endT = prop['service_window_end'];
+        final startT =
+            prop['service_window_start'] ?? kDefaultServiceWindowStart;
+        final endT = prop['service_window_end'] ?? kDefaultServiceWindowEnd;
         _windowStartRaw = startT;
         _windowShort = '${_fmtTime(startT)} – ${_fmtTime(endT)}';
         _updateCountdown();
@@ -257,7 +267,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
       } catch (_) {}
 
       if (mounted) setState(() => _loading = false);
-      if (_propertyId != null) _pollRunStatus();
+      if (_propertyId != null) _pollWorkerClockStatus();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -322,16 +332,15 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   }
 
   Widget _buildTab() {
-    switch (_tabIndex) {
-      case 0:
-        return _buildHomeTab();
-      case 1:
-        return _buildExtraServicesTab();
-      case 2:
-        return _buildSupportTab();
-      default:
-        return _buildProfileTab();
-    }
+    return IndexedStack(
+      index: _tabIndex,
+      children: [
+        _buildHomeTab(),
+        _buildExtraServicesTab(),
+        _buildSupportTab(),
+        _buildProfileTab(),
+      ],
+    );
   }
 
   // ── Home Tab ──────────────────────────────────────────────────────────────────
@@ -454,8 +463,22 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
           ],
         ),
         const SizedBox(width: 8),
-        Icon(Icons.notifications_outlined,
-            color: AppColors.rlvBlue, size: 26),
+        InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ResidentNotificationsScreen(),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: const Padding(
+            padding: EdgeInsets.all(4),
+            child: Icon(Icons.notifications_outlined,
+                color: AppColors.rlvBlue, size: 26),
+          ),
+        ),
       ],
     );
   }
@@ -596,18 +619,21 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
           _quickActionTile(
             icon: Icons.event_outlined,
             title: 'Request Pickup',
-            subtitle: _freeRemain > 0
-                ? 'Free ($_freeRemain left) • \$${_comebackFee.toStringAsFixed(0)} after limit'
-                : 'Paid comeback • \$${_comebackFee.toStringAsFixed(0)}',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ResidentComebackRequestScreen(
-                  freeRemain: _freeRemain,
-                  comebackFee: _comebackFee,
+            subtitle: _pickupActionSubtitle,
+            onTap: () async {
+              final refreshed = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ResidentComebackRequestScreen(
+                    freeRemain: _freeRemain,
+                    purchasedBalance: _purchasedBalance,
+                    propertyId: _propertyId,
+                    residentUnitId: _residentUnitId,
+                  ),
                 ),
-              ),
-            ),
+              );
+              if (refreshed == true && mounted) _load();
+            },
           ),
           const Divider(height: 1, color: AppColors.border),
           _quickActionTile(
@@ -620,7 +646,7 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
           _quickActionTile(
             icon: Icons.shopping_cart_outlined,
             title: 'Buy Extra Pickups',
-            subtitle: 'Purchase pickups',
+            subtitle: '1/\$5 · 3/\$14 · 5/\$20',
             onTap: () => setState(() => _tabIndex = 1),
           ),
         ],
@@ -671,65 +697,35 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   }
 
   Widget _buildAvailableServicesSection() {
-    const services = [
-      (Icons.local_shipping_outlined, 'Moving Service', 'Moving Service'),
-      (Icons.cleaning_services_outlined, 'Maid Service', 'Maid Service'),
-      (Icons.delete_outline, 'Bulk Trash Pickup', 'Bulk Trash Pickup'),
-      (Icons.more_horiz, 'More Services', 'Other'),
-    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Available Services',
-          style: GoogleFonts.montserrat(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.35,
-          children: services.map((s) {
-            return InkWell(
-              onTap: () => showServiceRequestSheet(
-                context,
-                initialServiceType: s.$3,
-                propertyId: _propertyId,
-              ),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surface1,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(s.$1, color: AppColors.success, size: 28),
-                    const SizedBox(height: 8),
-                    Text(
-                      s.$2,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ],
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Available Services',
+                style: GoogleFonts.montserrat(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
                 ),
               ),
-            );
-          }).toList(),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _tabIndex = 1),
+              child: Text(
+                'See all',
+                style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.rlvBlue),
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: 8),
+        ExtraServicesGrid(propertyId: _propertyId, compact: true),
       ],
     );
   }
@@ -937,12 +933,6 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
   // ── Extra Services Tab ────────────────────────────────────────────────────────
 
   Widget _buildExtraServicesTab() {
-    const services = [
-      (Icons.local_shipping_outlined, 'Moving Service', 'Moving Service'),
-      (Icons.cleaning_services_outlined, 'Maid Service', 'Maid Service'),
-      (Icons.delete_outline, 'Bulk Trash Pickup', 'Bulk Trash Pickup'),
-      (Icons.chair_outlined, 'Carpet Cleaning', 'Carpet Cleaning'),
-    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -952,52 +942,14 @@ class _ResidentDashboardScreenState extends State<ResidentDashboardScreen> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
               Text(
-                'Tap a service to submit a request with your preferred date.',
+                'Tap a service to submit a request with date and time.',
                 style: GoogleFonts.inter(
                     fontSize: 13, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 16),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 1.2,
-                children: services.map((s) {
-                  return InkWell(
-                    onTap: () => showServiceRequestSheet(
-                      context,
-                      initialServiceType: s.$3,
-                      propertyId: _propertyId,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.surface1,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(s.$1, color: AppColors.success, size: 32),
-                          const SizedBox(height: 8),
-                          Text(
-                            s.$2,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
+              ExtraServicesGrid(propertyId: _propertyId),
+              const SizedBox(height: 24),
+              BuyExtraPickupsSection(onPurchased: _load),
               const SizedBox(height: 24),
               Text(
                 'SERVICE HISTORY',

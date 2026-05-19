@@ -1,7 +1,13 @@
 # Current State
 
 ## Current Objective
-**Store-ready with resident mock layout + service request workflow.** Final RLV icon installed. Resident home matches client mock (pickup card, stats, quick actions, services grid, support bar). Extra-service requests persist to `service_requests` and appear on **owner** and **super_admin** inboxes. Apply migration `007_service_requests.sql` in Supabase before testing requests in production.
+**QA / client retest of resident dashboard** — mock-aligned home, comeback rules, extra services, support, and owner/admin inboxes. Live Supabase has migrations through **008**. Flutter web dev server typically on port **8091**.
+
+## Resume Here (next session)
+1. **Uncommitted work on `main`** (as of May 19, 2026): resident comeback/dashboard widgets + `008_*.sql` + brain edits — commit/push when retest passes.
+2. Retest as resident → confirm tab glitch gone, service submit with date+time, buy banked comebacks, request pickup tiers.
+3. Confirm owner/admin inbox receives `service_requests` after submit.
+4. Blockers before store: RLS on 19 tables, Stripe for paid comebacks, iOS signing.
 
 ## Run the App
 ```powershell
@@ -12,7 +18,7 @@ flutter run -d web-server --web-port 8091 --no-pub
 flutter run -d chrome --no-pub
 ```
 
-App: **http://localhost:8091**
+App: **http://localhost:8091** — hard refresh or `R` hot restart after pulling code.
 
 ---
 
@@ -25,23 +31,33 @@ App: **http://localhost:8091**
 | Region | AWS us-east-2 |
 | Site URL | `http://localhost:8091` |
 | Redirect URLs | `http://localhost:8091`, `com.relaxedliving.valet://login-callback` |
+| MCP | `.cursor/mcp.json` → `project_ref=airpwzzkyjqzeeqizvft` |
 
-- All core tables migrated, RLS enabled, SECURITY DEFINER RPCs in place
-- **`service_requests`** — migration `007_service_requests.sql` on GitHub `main`; apply via **Supabase GitHub integration** (push/deploy) or SQL Editor. **Not verified live yet** — REST returns 404 until migration runs.
-- **`resident_concerns`** — support/Q&A messages from residents (Support tab)
-- `violations` storage bucket with RLS policies
-- Seed data: property `10000000-0000-0000-0000-000000000001` (Sunset Gardens), unit 104, invite code `WELCOME104`
-- Email confirmation **disabled** — re-enable when a real email provider is configured
-- **No email on service submit** — dashboard inbox only (owner + admin)
+### Live migrations (hosted DB history via MCP)
+| Version (hosted name) | Repo file | What it does |
+|---|---|---|
+| `add_owner_user_role` | (enum fix) | `user_role` + `'owner'` |
+| `007_service_requests` | `007_service_requests.sql` | `service_requests` table + RLS |
+| `resident_comeback_balance_service_time` | `008_resident_comeback_balance_service_time.sql` | `purchased_comeback_balance`, `preferred_time`, resident UPDATE on `resident_units` |
+
+- **`service_requests`** — resident insert/read; owner + `super_admin` read/update. Columns: `preferred_date`, `preferred_time`, `message`, `service_type`, `status`.
+- **`resident_units.purchased_comeback_balance`** — INTEGER default 0; purchased comebacks roll over; residents can UPDATE own row (policy from 008).
+- **Free monthly comeback** — tracked in `resident_monthly_usage.free_comeback_used`; app enforces **1/month** (does not roll over).
+- **RLS drift (May 18 MCP audit)** — ~19 tables still have RLS disabled while policies exist on some. **Critical before production**; fix in batches with signup/resident/admin smoke tests.
+- **`resident_concerns`** — Support tab messages.
+- **`clock_events`** — worker clock in/out; resident dashboard worker badge reads latest event per `property_id`.
+- Seed: property `10000000-0000-0000-0000-000000000001` (Sunset Gardens), unit 104, invite `WELCOME104`.
+- Email confirmation **disabled** until real provider configured.
+- Service/extra requests: **inbox only** (no email).
 
 ---
 
 ## Flutter App (`mobile/`)
 
-- **Package name**: `valet`
-- **Entry**: `main.dart` → `ValetApp` → `AuthGate` → `RoleHome` → role dashboard
+- **Package**: `valet`
+- **Entry**: `main.dart` → `ValetApp` → `AuthGate` → `RoleHome`
 
-### Role → Screen Routing
+### Role → Screen
 
 | Role | Screen | Theme |
 |---|---|---|
@@ -52,67 +68,68 @@ App: **http://localhost:8091**
 | `owner` | `OwnerDashboardScreen` | Light |
 | `super_admin` | `AdminDashboardScreen` | Light |
 
-### Resident Dashboard (May 2026)
+### Resident dashboard (Session 14–15)
 
-**Bottom nav:** Home | Extra Services | Support | Profile (Messages tab removed)
+**Nav:** Home | Extra Services | Support | Profile
 
-**Home tab:** mock-aligned layout using existing `AppColors` (dark + `rlvBlue` / `success` accents):
-- Welcome + worker status + notifications icon
-- Next pickup card (date, service window, countdown to window start)
-- Free comebacks / violations stat tiles (live from Supabase)
-- Quick actions: Request Pickup → `ResidentComebackRequestScreen`, Service History / Buy Extras → Extra Services tab
-- Available services 2×2 grid → `showServiceRequestSheet()`
-- Support bar → Support tab
+| Area | Implementation |
+|---|---|
+| Tabs | `IndexedStack` — prevents grid overlay glitch on tab switch |
+| Worker status | Latest `clock_events` for property → `clock_in` = **ON DUTY**, else **SCHEDULED** |
+| Next pickup | Countdown in hours (`12h`, `<1h`, `Now`); window default **6:00 PM – 10:00 PM** if property unset |
+| Comebacks | 1 free/month (no rollover); banked `purchased_comeback_balance`; paid single **$5**; packs **1/$5, 3/$14, 5/$20** |
+| Bell | → `ResidentNotificationsScreen` |
+| Home services | `ExtraServicesGrid` (compact) + link to Extra Services tab |
+| Extra Services | `ExtraServicesGrid` + `BuyExtraPickupsSection` + `ResidentPickupHistoryView` |
+| Support | `ResidentSupportPanel` → `resident_concerns` |
+| Service sheet | `service_request_sheet.dart` — date + time required, message optional |
 
-**Extra Services tab:** service grid + `ResidentPickupHistoryView`
+**Key files**
+- `mobile/lib/features/resident/screens/resident_dashboard_screen.dart`
+- `mobile/lib/features/resident/screens/resident_comeback_request_screen.dart`
+- `mobile/lib/features/resident/widgets/service_request_sheet.dart`
+- `mobile/lib/features/resident/widgets/extra_services_grid.dart`
+- `mobile/lib/features/resident/widgets/buy_extra_pickups_section.dart`
+- `mobile/lib/features/resident/models/comeback_pricing.dart`
+- `mobile/lib/features/shared/screens/service_requests_inbox_screen.dart`
 
-**Support tab:** `ResidentSupportPanel` — topic dropdown + message → `resident_concerns`
+### Owner / Admin inboxes
 
-**Service requests:** `lib/features/resident/widgets/service_request_sheet.dart` — dropdown, date picker, message → `service_requests`
-
-### Owner / Admin Inboxes
-
-| Role | Where | What |
+| Role | Path | Content |
 |---|---|---|
-| `super_admin` | Admin → **Resident Inbox** tab | Segments: **Concerns** \| **Service Requests**; status filters; full inbox link |
-| `owner` | Owner → More → **Service Requests Inbox** | `ServiceRequestsInboxScreen` — mark in review / fulfilled / cancelled |
-
-Shared screen: `lib/features/shared/screens/service_requests_inbox_screen.dart`
-
-### Design System
-- Tokens: `core/theme/app_colors.dart` — dark surfaces, `rlvBlue` brand, semantic success/warning/error
-- Shared widgets: `BentoCard`, `MetricTile`, `GlowBadge`, `PrimaryButton`, `RoleBottomNav`, Lottie feedback
-
-### Auth Flow
-- Password recovery → `ChangePasswordScreen`; mobile deep link `com.relaxedliving.valet://login-callback`
-- `supabase_flutter` v1.10.25 — use `.filter()` not `.inFilter()`; `auth.updateUser()` not `.update()`
+| `super_admin` | Admin → Resident Inbox | Concerns \| Service Requests |
+| `owner` | More → Service Requests Inbox | Fulfill / cancel service requests |
 
 ---
 
-## Native Platform (Android + iOS)
+## Retest Checklist (resident)
+
+- [ ] Tab switch Home ↔ Extra Services — no duplicate grid overlay
+- [ ] Notification bell opens list
+- [ ] Countdown shows hours; service window 6–10 PM (or property times)
+- [ ] Worker **ON DUTY** only after driver clocks in at property
+- [ ] Request Pickup: free monthly → banked → $5 paid path
+- [ ] Buy Extra Pickups increments `purchased_comeback_balance`
+- [ ] Extra service: date + time → submit OK → visible in owner/admin inbox
+- [ ] Support concern still submits
+
+**Accounts:** `adam.grant824+res2@gmail.com` / `TestPass123!` (resident) · `relaxedlivingtx@gmail.com` / `RelaxedLiving2026!` (super_admin)
+
+---
+
+## Native Platform
 
 - Bundle ID: `com.relaxedliving.valet`
-- Android release signing configured (`upload-keystore.jks` + `key.properties`, repo private)
-- Final RLV icon + splash regenerated
-- **iOS:** requires Mac + Xcode + Apple Developer account
-
----
-
-## Test Accounts
-
-See `brain/test_credentials.md`. Quick reference:
-
-| Email | Password | Role |
-|---|---|---|
-| `relaxedlivingtx@gmail.com` | `RelaxedLiving2026!` | `super_admin` |
-| `adam.grant824+res2@gmail.com` | `TestPass123!` | `resident` (unit 104) |
+- Android: release keystore configured
+- RLV icon + splash in `mobile/assets/icon/`
+- iOS: needs Mac + Xcode + Apple Developer account
 
 ---
 
 ## Known Issues / Constraints
 
-- **Apply `007_service_requests.sql`** before service request submit works against hosted Supabase
-- `supabase_flutter` v1 → v2 upgrade deferred (network/deps)
-- `PmComplianceReportScreen` / worker map: `dart:html` on web only — need native helpers for store builds
-- Direct messages UI removed from resident nav; `direct_messages` table still exists if re-enabled later
-- Stripe paid comebacks not wired
+- **Stripe** — paid comeback + pack purchase UI records DB changes; payment is placeholder
+- **`supabase_flutter` v1** — upgrade deferred
+- **Web-only** — worker map / PM CSV use `dart:html`; need native alternatives for store builds
+- **RLS** — many tables not enforcing RLS on hosted DB despite policies in repo
+- **Notifications screen** — loads all active notifications; not yet filtered tightly by resident `property_id`

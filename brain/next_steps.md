@@ -12,7 +12,9 @@
   flutter build appbundle
   ```
   Upload the `.aab` to Google Play Console
-- [ ] **Apply migration `007_service_requests.sql`** — file is on `main`; with **GitHub ↔ Supabase** integration, push to production branch should auto-apply. Verify in [Database → Migrations](https://supabase.com/dashboard/project/airpwzzkyjqzeeqizvft/database/migrations). If still pending, use Integrations → GitHub → Deploy, or paste SQL in SQL Editor as fallback.
+- [x] **Apply migration `007_service_requests.sql`** — applied live May 18 via Supabase MCP (also added `owner` to `user_role` enum). Test: resident Extra Services submit → Admin/Owner inbox.
+- [x] **Apply migration `008_resident_comeback_balance_service_time.sql`** — applied live May 18 via Supabase MCP (`resident_comeback_balance_service_time`).
+- [ ] **Re-enable RLS on core tables** — MCP security advisor: 19 `public` tables have RLS off; `users`, `properties`, `resident_units`, `missed_pickup_requests`, `worker_assignments` have policies defined but RLS disabled. Run remediation from dashboard Database Linter or match repo migration SQL; test resident signup + admin flows after each batch.
 - [ ] **Production Supabase config** — when deploying to a real domain:
   - Update Site URL from `http://localhost:8091` to `https://yourdomain.com`
   - Add `https://yourdomain.com` to Redirect URLs
@@ -21,9 +23,16 @@
 
 ---
 
+## QA (in progress)
+
+- [ ] **Resident dashboard retest** — use checklist in `brain/current_state.md` (tabs, bell, countdown, clock-in status, comebacks, extra service → inbox)
+- [ ] **Commit & push** resident Session 15 files if retest passes (`008` migration SQL, dashboard/comeback/widgets/models, brain)
+
+---
+
 ## Next Features (prioritized)
 
-- [ ] **Stripe paid comeback requests** — comeback card is now on resident Home tab; `ResidentComebackRequestScreen` already handles free/paid branching. Blocked on Stripe account + webhook secret. Once you have those, wire `stripe_checkout` into the paid path of `ResidentComebackRequestScreen`
+- [ ] **Stripe paid comeback requests + pickup packs** — `ResidentComebackRequestScreen` and `BuyExtraPickupsSection` record DB state; wire Stripe Checkout + webhook. Blocked on Stripe account + webhook secret.
 - [ ] **Push notifications** — defer until native build is in TestFlight / Play Store internal testing:
   - Android: FCM (Firebase Cloud Messaging) — free
   - iOS: APNs via FCM or OneSignal — requires Apple Developer account
@@ -57,3 +66,4 @@ All prior work is complete and documented in `brain/change_log.md`. Summary:
 | 12 | Full dashboard rebuild — RLV brand spec, BentoCard system, fl_chart, realtime DMs |
 | 13 | Brand mockup pixel-alignment (all 5 dashboards), comeback card restored, lint cleanup |
 | 14 | Resident mock home layout, Support nav, `service_requests` + owner/admin inboxes |
+| 15 | Comeback rules (1 free/mo, banked packs), clock-in worker status, tab/grid fixes, date+time service requests, migrations 007+008 live |

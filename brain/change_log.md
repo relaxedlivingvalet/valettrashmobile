@@ -5,6 +5,44 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Brain refresh (resident retest state)
+
+- **Updated**: `brain/current_state.md` (resume notes, retest checklist, migration table, key files, uncommitted warning), `architecture.md`, `decisions.md`, `next_steps.md`
+- **Reason**: Single source of truth before client QA
+
+### 2026-05-18 — Applied migration `008` to live Supabase
+
+- **MCP** `resident_comeback_balance_service_time` on `airpwzzkyjqzeeqizvft`: `purchased_comeback_balance`, `preferred_time`, resident UPDATE policy on `resident_units`
+- **Verified**: columns present in `information_schema`
+
+### 2026-05-18 — Resident dashboard: comebacks, clock-in status, UI fixes
+
+- **Comebacks**: 1 free/month (no rollover); `purchased_comeback_balance` on `resident_units` (rolls over); packs 1/$5, 3/$14, 5/$20 via `BuyExtraPickupsSection`
+- **Worker status**: `clock_events` last event per property (clock_in → ON DUTY)
+- **UI**: `IndexedStack` tabs; `ExtraServicesGrid` fixed height; bell → notifications; countdown hours-only; service window 6–10 PM default
+- **Service requests**: required date + time; optional message default text; `preferred_time` column (migration 008)
+- **Files**: `008_resident_comeback_balance_service_time.sql`, `resident_dashboard_screen.dart`, `resident_comeback_request_screen.dart`, `service_request_sheet.dart`, `extra_services_grid.dart`, `buy_extra_pickups_section.dart`, `comeback_pricing.dart`, brain + `MIGRATIONS.md`
+- **Reason**: Resident dashboard business rules + tab glitch / submit fixes from client feedback
+
+### 2026-05-18 — Applied `service_requests` migration to live Supabase
+
+- **MCP migrations** on `airpwzzkyjqzeeqizvft`:
+  1. `add_owner_user_role` — `ALTER TYPE user_role ADD VALUE 'owner'` (required; policies failed without it)
+  2. `007_service_requests` — table, indexes, RLS, 4 policies
+- **Files Modified**: `supabase/migrations/007_service_requests.sql` (prepend enum fix), `brain/current_state.md`, `brain/next_steps.md`, `brain/change_log.md`
+- **Reason**: Unblock resident extra-service requests (was 404)
+
+### 2026-05-18 — Supabase MCP live project audit
+
+- **Verified via Cursor Supabase plugin** (`list_tables`, `list_migrations`, `get_advisors`) on project `airpwzzkyjqzeeqizvft`:
+  - `service_requests` table **not present** — confirms blocker for resident extra-service workflow
+  - `list_migrations` returned empty (migration history not synced to hosted DB)
+  - Security advisors: 19 tables RLS-disabled; several tables have policies but RLS off
+- **Files Modified**: `brain/current_state.md`, `brain/next_steps.md`, `brain/change_log.md`
+- **Reason**: Document live DB truth vs repo assumptions before store submission
+
+---
+
 ### 2026-05-17 — Session 13: Brand mockup alignment across all 5 dashboards
 
 - **Files Modified** (5 parallel agents, no conflicts):

@@ -14,7 +14,7 @@ const kServiceTypes = [
   'Other',
 ];
 
-/// Bottom sheet: service type, preferred date, message → [service_requests].
+/// Bottom sheet: service type, date, time, message → [service_requests].
 Future<bool?> showServiceRequestSheet(
   BuildContext context, {
   String? initialServiceType,
@@ -22,6 +22,7 @@ Future<bool?> showServiceRequestSheet(
 }) {
   return showModalBottomSheet<bool>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     backgroundColor: AppColors.surface1,
     shape: const RoundedRectangleBorder(
@@ -50,6 +51,7 @@ class _ServiceRequestSheet extends StatefulWidget {
 class _ServiceRequestSheetState extends State<_ServiceRequestSheet> {
   late String _serviceType;
   DateTime? _preferredDate;
+  TimeOfDay? _preferredTime;
   final _messageController = TextEditingController();
   bool _submitting = false;
   bool _submitted = false;
@@ -92,17 +94,61 @@ class _ServiceRequestSheetState extends State<_ServiceRequestSheet> {
     if (picked != null) setState(() => _preferredDate = picked);
   }
 
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _preferredTime ?? const TimeOfDay(hour: 10, minute: 0),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.rlvBlue,
+              surface: AppColors.surface1,
+              onSurface: AppColors.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) setState(() => _preferredTime = picked);
+  }
+
+  String? _formatPreferredTime() {
+    if (_preferredTime == null) return null;
+    final t = _preferredTime!;
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
+  }
+
+  String _formatTimeLabel(TimeOfDay t) {
+    final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+    final m = t.minute.toString().padLeft(2, '0');
+    final ap = t.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$h:$m $ap';
+  }
+
   Future<void> _submit() async {
-    final message = _messageController.text.trim();
-    if (message.isEmpty) {
+    if (_preferredDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please add details about your request.'),
+          content: Text('Please select a preferred date.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
+    if (_preferredTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a preferred time.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final message = _messageController.text.trim();
+    final body = message.isEmpty ? 'No additional details provided.' : message;
 
     setState(() => _submitting = true);
     try {
@@ -123,15 +169,20 @@ class _ServiceRequestSheetState extends State<_ServiceRequestSheet> {
         } catch (_) {}
       }
 
-      await client.from('service_requests').insert({
+      final payload = <String, dynamic>{
         'resident_user_id': uid,
         'property_id': propertyId,
         'service_type': _serviceType,
-        'preferred_date': _preferredDate != null
-            ? '${_preferredDate!.year}-${_preferredDate!.month.toString().padLeft(2, '0')}-${_preferredDate!.day.toString().padLeft(2, '0')}'
-            : null,
-        'message': message,
-      });
+        'preferred_date':
+            '${_preferredDate!.year}-${_preferredDate!.month.toString().padLeft(2, '0')}-${_preferredDate!.day.toString().padLeft(2, '0')}',
+        'message': body,
+      };
+      final timeStr = _formatPreferredTime();
+      if (timeStr != null) {
+        payload['preferred_time'] = timeStr;
+      }
+
+      await client.from('service_requests').insert(payload);
 
       if (mounted) setState(() => _submitted = true);
     } catch (e) {
@@ -206,7 +257,7 @@ class _ServiceRequestSheetState extends State<_ServiceRequestSheet> {
                     icon: const Icon(Icons.calendar_today_outlined, size: 18),
                     label: Text(
                       _preferredDate == null
-                          ? 'Select date (optional)'
+                          ? 'Select date'
                           : '${_preferredDate!.month}/${_preferredDate!.day}/${_preferredDate!.year}',
                       style: GoogleFonts.inter(fontSize: 14),
                     ),
@@ -220,7 +271,28 @@ class _ServiceRequestSheetState extends State<_ServiceRequestSheet> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _label('MESSAGE'),
+                  _label('PREFERRED TIME'),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _pickTime,
+                    icon: const Icon(Icons.schedule_outlined, size: 18),
+                    label: Text(
+                      _preferredTime == null
+                          ? 'Select time'
+                          : _formatTimeLabel(_preferredTime!),
+                      style: GoogleFonts.inter(fontSize: 14),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: AppColors.border),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _label('MESSAGE (OPTIONAL)'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _messageController,

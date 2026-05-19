@@ -18,7 +18,8 @@ Relaxed Living Valet is a production mobile app for valet trash service at apart
 | Resident | `resident` | ResidentDashboardScreen |
 | Driver/Porter | `driver` | WorkerDashboardScreen |
 | Property Manager | `property_manager` | PropertyManagerDashboardNewScreen |
-| Super Admin | `super_admin` | OwnerDashboardScreen |
+| Owner | `owner` | OwnerDashboardScreen |
+| Super Admin | `super_admin` | AdminDashboardScreen |
 
 ## Primary Goals
 - Residents sign up via invite code + unit number, then track their service

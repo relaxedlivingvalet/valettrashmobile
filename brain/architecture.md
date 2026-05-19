@@ -14,8 +14,9 @@ valettrashmobile/
 │       └── features/
 │           ├── auth/screens/      # SimpleAuthScreen, ResidentSignupScreen
 │           ├── resident/
-│           │   ├── screens/       # ResidentDashboardScreen, concerns, comeback, etc.
-│           │   └── widgets/       # service_request_sheet.dart
+│           │   ├── screens/       # ResidentDashboardScreen, comeback, concerns, notifications
+│           │   ├── widgets/       # service_request_sheet, extra_services_grid, buy_extra_pickups_section
+│           │   └── models/        # comeback_pricing.dart (packs + monthly free constant)
 │           ├── shared/screens/    # service_requests_inbox_screen.dart (owner + admin)
 │           ├── worker/screens/    # WorkerDashboardScreen, ViolationReportScreen
 │           ├── manager/screens/   # PropertyManagerDashboardNewScreen, SimpleNotificationSenderScreen
@@ -32,7 +33,7 @@ valettrashmobile/
 
 - `valet_app.dart` — root widget; `AuthGate` listens to Supabase auth stream; `RoleHome` fetches `users.role` and routes to the correct dashboard
 - `features/auth/` — sign-in + resident sign-up flow (invite code verification → account creation → claim invite)
-- `features/resident/` — mock-aligned home, extra-service request sheet, support/concerns panel, comeback flow
+- `features/resident/` — mock-aligned home (`IndexedStack` tabs), comeback tiers (free monthly / banked / paid), `clock_events` worker badge, extra-service sheet (date+time), buy pickup packs
 - `features/shared/` — service request inbox for owner and super_admin fulfillment
 - `features/worker/` — driver route list, pickup marking, violation report with `image_picker` + Supabase Storage upload
 - `features/manager/` — property manager dashboard + notification sender
@@ -54,7 +55,9 @@ valettrashmobile/
 |---|---|
 | `users` | All users; `role` column drives app routing |
 | `properties` → `buildings` → `floors` → `units` | Property hierarchy |
-| `resident_units` | Links residents to their unit + property |
+| `resident_units` | Links residents to unit + property; `purchased_comeback_balance` (008) |
+| `resident_monthly_usage` | Per-month `free_comeback_used` (1 free/month, no rollover) |
+| `clock_events` | Worker clock in/out per property — resident worker status badge |
 | `invite_codes` | One-time codes; verified + claimed via SECURITY DEFINER RPCs |
 | `user_properties` | Links managers/admins to properties they manage |
 | `pickups` | Nightly pickup events per route |
@@ -63,7 +66,8 @@ valettrashmobile/
 | `routes` / `worker_assignments` | Route scheduling and driver assignment |
 | `subscriptions` / `invoices` | Billing (Stripe integration target) |
 | `resident_concerns` | Support messages from residents (Support tab) |
-| `service_requests` | Extra-service requests (Moving, Maid, Bulk, etc.) — migration `007` |
+| `service_requests` | Extra-service requests — `007` + `preferred_time` in `008` |
+| `missed_pickup_requests` | Comeback pickup requests (free / paid) |
 
 ## External Integrations
 - **Supabase** — auth, database, storage, edge functions
