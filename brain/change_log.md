@@ -5,6 +5,16 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — GitHub push billing door counts (`pending commit`)
+
+- Door-count billing UI, migration 011, brain refresh
+
+### 2026-05-19 — Billing: enter total + occupied doors (auto-calc)
+
+- **`billing_total_doors` / `billing_occupied_doors`** on properties (migration `011`)
+- **Property Billing Rates** — inputs: total doors, occupied, $/door; live calc occupancy %, billable doors, monthly $
+- PM/owner dashboards use saved door counts when set
+
 ### 2026-05-19 — Admin property billing rates screen
 
 - **`AdminPropertyBillingScreen`** — edit `monthly_fee_per_door` and minimum billable % per property

@@ -210,7 +210,7 @@ class _PropertyManagerDashboardNewScreenState
       final userPropsRows = await client
           .from('user_properties')
           .select(
-            'property_id, properties(id, name, service_window_start, service_window_end, is_active, monthly_fee_per_door, minimum_billable_occupancy_percent)',
+            'property_id, properties(id, name, service_window_start, service_window_end, is_active, monthly_fee_per_door, minimum_billable_occupancy_percent, billing_total_doors, billing_occupied_doors)',
           )
           .eq('user_id', uid);
 
@@ -245,24 +245,18 @@ class _PropertyManagerDashboardNewScreenState
         final unitIds = results[3] as List<String>;
         final unitsOverview =
             await _loadPropertyUnitsOverview(propId, propInvites);
-        final occupiedCount = residentCount;
-        final minPct = PropertyBilling.readMinBillablePercent(
-            Map<String, dynamic>.from(propData));
-        final feePerDoor = PropertyBilling.readFeePerDoor(
-            Map<String, dynamic>.from(propData));
-        final billableDoors = PropertyBilling.billableDoors(
-          totalUnits: unitCount,
-          occupiedUnits: occupiedCount,
-          minPercent: minPct,
+        final billingSnap = PropertyBilling.snapshot(
+          property: Map<String, dynamic>.from(propData),
+          countedUnits: unitCount,
+          countedOccupied: residentCount,
         );
-        final occupancyPct = PropertyBilling.occupancyPercent(
-          unitCount,
-          occupiedCount,
-        );
-        final estMonthlyBill = PropertyBilling.monthlyContractAmount(
-          billableDoors: billableDoors,
-          feePerDoor: feePerDoor,
-        );
+        final occupiedCount = billingSnap['occupied_doors'] as int;
+        final totalForBilling = billingSnap['total_doors'] as int;
+        final billableDoors = billingSnap['billable_doors'] as int;
+        final occupancyPct = billingSnap['occupancy_percent'] as double;
+        final estMonthlyBill = billingSnap['monthly_amount'] as double;
+        final minPct = billingSnap['min_billable_percent'] as double;
+        final feePerDoor = billingSnap['fee_per_door'] as double;
 
         int violationCount = 0;
         int comebackCount = 0;
@@ -282,7 +276,8 @@ class _PropertyManagerDashboardNewScreenState
           'id': propId,
           'name': propName,
           'service_window': '${_fmtTime(sw)} – ${_fmtTime(ew)}',
-          'unit_count': unitCount,
+          'unit_count': totalForBilling,
+          'unit_count_in_app': unitCount,
           'resident_count': residentCount,
           'violation_count': violationCount,
           'comeback_count': comebackCount,
@@ -1160,9 +1155,12 @@ class _PropertyManagerDashboardNewScreenState
     final total = p['unit_count'] as int? ?? 0;
     final occupied = p['occupied_count'] as int? ?? p['resident_count'] as int? ?? 0;
     final billable = p['billable_doors'] as int? ?? 0;
-    final minPct = ((p['min_billable_pct'] as num? ?? 0.85) * 100).round();
+    final minPctFraction = (p['min_billable_pct'] as num? ?? 0.85).toDouble();
+    final minPctDisplay = (minPctFraction * 100).round();
     final occPct = ((p['occupancy_pct'] as num? ?? 0) * 100).round();
-    final meetsMin = total == 0 || billable <= occupied || occupied >= (total * (p['min_billable_pct'] as num? ?? 0.85)).ceil();
+    final meetsMin = total == 0 ||
+        billable <= occupied ||
+        occupied >= PropertyBilling.minimumBillableDoors(total, minPctFraction);
 
     return Container(
       width: double.infinity,
@@ -1178,10 +1176,11 @@ class _PropertyManagerDashboardNewScreenState
       ),
       child: Text(
         total == 0
-            ? 'Add units to track occupancy and billing.'
-            : '$occupied of $total units occupied ($occPct%). '
-                'You are billed for $billable doors minimum '
-                '($minPct% of $total = ${(total * (p['min_billable_pct'] as num? ?? 0.85)).ceil()} doors, '
+            ? 'Ask super admin to set total doors under Property Billing Rates.'
+            : '$occupied of $total doors occupied ($occPct%). '
+                'You are billed for $billable billable doors '
+                '($minPctDisplay% minimum = '
+                '${PropertyBilling.minimumBillableDoors(total, minPctFraction)} doors, '
                 'or more if occupancy is higher).',
         style: GoogleFonts.inter(
           fontSize: 11,

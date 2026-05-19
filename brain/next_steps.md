@@ -16,6 +16,8 @@
 - [x] **Apply migration `008_resident_comeback_balance_service_time.sql`** — applied live May 18 via Supabase MCP (`resident_comeback_balance_service_time`).
 - [x] **Apply migration `009_staff_invites.sql`** — applied live May 19 via Supabase MCP (`staff_invites`).
 - [x] **Apply migration `010_property_billing_metrics.sql`** — applied live May 19 (`monthly_fee_per_door`, `minimum_billable_occupancy_percent`).
+- [x] **Apply migration `011_property_door_counts.sql`** — applied live May 19 (`billing_total_doors`, `billing_occupied_doors`).
+- [ ] **Property Billing Rates QA** — enter total/occupied/$ for Riverside Lofts; verify owner + PM dashboards match.
 - [ ] **Staff invite QA** — super admin generates code → Staff signup → lands on correct role dashboard (sign out/in if cached wrong role).
 - [ ] **Owner Financials QA** — per-property revenue/door, export CSV, Stripe payout section when data exists.
 - [ ] **PM occupancy billing QA** — vacant/occupied per unit; billable ≥ 85% of total units; export unit codes CSV.
@@ -34,6 +36,7 @@
 - [ ] **Resident dashboard retest** — use checklist in `brain/current_state.md` (tabs, bell, countdown, clock-in status, comebacks, extra service → inbox)
 - [x] **Commit & push** staff invites — `2a996f7` on `main` (May 19, 2026)
 - [x] **Commit & push** owner financials + PM billing + invite playbook — `b41ae6a` on `main` (May 19, 2026)
+- [ ] **Commit & push** billing door counts UI — this session
 
 ---
 

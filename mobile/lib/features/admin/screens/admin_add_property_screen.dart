@@ -25,7 +25,8 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
   final _buildingCtrl = TextEditingController(text: 'Building A');
   final _unitCtrl = TextEditingController(text: '101');
   final _feePerDoorCtrl = TextEditingController(text: '25');
-  final _minBillablePctCtrl = TextEditingController(text: '85');
+  final _totalDoorsCtrl = TextEditingController();
+  final _occupiedDoorsCtrl = TextEditingController();
 
   bool _createStarterUnit = true;
   bool _saving = false;
@@ -42,7 +43,8 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
     _buildingCtrl.dispose();
     _unitCtrl.dispose();
     _feePerDoorCtrl.dispose();
-    _minBillablePctCtrl.dispose();
+    _totalDoorsCtrl.dispose();
+    _occupiedDoorsCtrl.dispose();
     super.dispose();
   }
 
@@ -58,10 +60,15 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
     }
 
     final feePerDoor = double.tryParse(_feePerDoorCtrl.text.trim()) ?? 25;
-    final minPct =
-        (double.tryParse(_minBillablePctCtrl.text.trim()) ?? 85) / 100;
-    if (feePerDoor <= 0 || minPct <= 0 || minPct > 1) {
-      _snack('Check fee per door and minimum billable % (1–100)', error: true);
+    final totalDoors = int.tryParse(_totalDoorsCtrl.text.trim());
+    final occupiedDoors = int.tryParse(_occupiedDoorsCtrl.text.trim());
+    if (feePerDoor <= 0) {
+      _snack('Enter a valid fee per door', error: true);
+      return;
+    }
+    if (totalDoors != null &&
+        (totalDoors <= 0 || (occupiedDoors != null && occupiedDoors > totalDoors))) {
+      _snack('Check total doors and occupied count', error: true);
       return;
     }
 
@@ -81,7 +88,8 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
             'free_comeback_pickups_per_month': 1,
             'comeback_pickup_fee': 5.00,
             'monthly_fee_per_door': feePerDoor,
-            'minimum_billable_occupancy_percent': minPct,
+            if (totalDoors != null) 'billing_total_doors': totalDoors,
+            if (occupiedDoors != null) 'billing_occupied_doors': occupiedDoors,
             'is_active': true,
           })
           .select('id')
@@ -202,7 +210,7 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            Text('PM BILLING (MONTHLY)',
+            Text('BILLING (OPTIONAL)',
                 style: GoogleFonts.inter(
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
@@ -212,18 +220,19 @@ class _AdminAddPropertyScreenState extends State<AdminAddPropertyScreen> {
             Row(
               children: [
                 Expanded(
-                  child: _field(c, _feePerDoorCtrl, 'Fee per billable door', '25'),
+                  child: _field(c, _totalDoorsCtrl, 'Total doors', '120'),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _field(
-                      c, _minBillablePctCtrl, 'Min billable %', '85'),
+                  child: _field(c, _occupiedDoorsCtrl, 'Occupied', '85'),
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            _field(c, _feePerDoorCtrl, 'Fee per billable door / month', '25'),
             const SizedBox(height: 8),
             Text(
-              'PM pays for at least the minimum % of units (e.g. 85) or actual occupancy, whichever is higher.',
+              'Billable doors = max(occupied, 85% of total). Edit anytime under Property Billing Rates.',
               style: GoogleFonts.inter(fontSize: 12, color: c.textSecondary),
             ),
             const SizedBox(height: 20),

@@ -109,7 +109,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       final propsRows = await client
           .from('properties')
           .select(
-              'id, name, service_window_start, service_window_end, is_active, city, state, monthly_fee_per_door, minimum_billable_occupancy_percent')
+              'id, name, service_window_start, service_window_end, is_active, city, state, monthly_fee_per_door, minimum_billable_occupancy_percent, billing_total_doors, billing_occupied_doors')
           .eq('is_active', true)
           .order('name');
 
@@ -138,17 +138,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         final unitCount = results[2] as int;
         final claimedCount =
             invites.where((i) => i['assigned_user_id'] != null).length;
-        final feePerDoor = PropertyBilling.readFeePerDoor(prop);
-        final minPct = PropertyBilling.readMinBillablePercent(prop);
-        final billableDoors = PropertyBilling.billableDoors(
-          totalUnits: unitCount,
-          occupiedUnits: residentCount,
-          minPercent: minPct,
+        final billingSnap = PropertyBilling.snapshot(
+          property: prop,
+          countedUnits: unitCount,
+          countedOccupied: residentCount,
         );
-        final contractMonthly = PropertyBilling.monthlyContractAmount(
-          billableDoors: billableDoors,
-          feePerDoor: feePerDoor,
-        );
+        final billableDoors = billingSnap['billable_doors'] as int;
+        final contractMonthly = billingSnap['monthly_amount'] as double;
+        final totalForBilling = billingSnap['total_doors'] as int;
+        final occupiedForBilling = billingSnap['occupied_doors'] as int;
 
         final sw = prop['service_window_start'] ?? '18:00';
         final ew = prop['service_window_end'] ?? '22:00';
@@ -158,16 +156,14 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           'name': propName,
           'location': '${prop['city'] ?? ''}, ${prop['state'] ?? ''}',
           'service_window': '${_fmtTime(sw)} – ${_fmtTime(ew)}',
-          'unit_count': unitCount,
+          'unit_count': totalForBilling,
+          'unit_count_in_app': unitCount,
           'resident_count': residentCount,
-          'occupied_count': residentCount,
+          'occupied_count': occupiedForBilling,
           'billable_doors': billableDoors,
-          'occupancy_pct': PropertyBilling.occupancyPercent(
-            unitCount,
-            residentCount,
-          ),
-          'fee_per_door': feePerDoor,
-          'min_billable_pct': minPct,
+          'occupancy_pct': billingSnap['occupancy_percent'],
+          'fee_per_door': billingSnap['fee_per_door'],
+          'min_billable_pct': billingSnap['min_billable_percent'],
           'contract_monthly': contractMonthly,
           'resident_mrr': 0.0,
           'paid_invoices': 0.0,

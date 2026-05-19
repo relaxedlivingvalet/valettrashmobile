@@ -45,4 +45,62 @@ abstract final class PropertyBilling {
     if (v is num) return v.toDouble();
     return defaultMinimumBillablePercent;
   }
+
+  /// Prefer [billing_total_doors] on property; else [countedUnits] from units table.
+  static int totalDoors(
+    Map<String, dynamic> property, {
+    required int countedUnits,
+  }) {
+    final v = property['billing_total_doors'];
+    if (v is int && v > 0) return v;
+    if (v is num && v.toInt() > 0) return v.toInt();
+    return countedUnits;
+  }
+
+  /// Prefer [billing_occupied_doors] when set; else [countedOccupied] from resident_units.
+  static int occupiedDoors(
+    Map<String, dynamic> property, {
+    required int countedOccupied,
+  }) {
+    if (property['billing_occupied_doors'] != null) {
+      final v = property['billing_occupied_doors'];
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+    }
+    return countedOccupied;
+  }
+
+  static int minimumBillableDoors(int totalUnits, double minPercent) {
+    if (totalUnits <= 0) return 0;
+    return (totalUnits * minPercent).ceil();
+  }
+
+  /// Summary for dashboards and admin UI.
+  static Map<String, dynamic> snapshot({
+    required Map<String, dynamic> property,
+    required int countedUnits,
+    required int countedOccupied,
+  }) {
+    final total = totalDoors(property, countedUnits: countedUnits);
+    final occupied = occupiedDoors(property, countedOccupied: countedOccupied);
+    final minPct = readMinBillablePercent(property);
+    final minDoors = minimumBillableDoors(total, minPct);
+    final billable = billableDoors(
+      totalUnits: total,
+      occupiedUnits: occupied,
+      minPercent: minPct,
+    );
+    final fee = readFeePerDoor(property);
+    final monthly = monthlyContractAmount(billableDoors: billable, feePerDoor: fee);
+    return {
+      'total_doors': total,
+      'occupied_doors': occupied,
+      'occupancy_percent': occupancyPercent(total, occupied),
+      'min_billable_percent': minPct,
+      'minimum_billable_doors': minDoors,
+      'billable_doors': billable,
+      'fee_per_door': fee,
+      'monthly_amount': monthly,
+    };
+  }
 }
