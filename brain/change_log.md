@@ -5,6 +5,11 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Pushed Session 15 to GitHub
+
+- **Commit** `a53e5e4` on `main` — resident comebacks, dashboard UI fixes, migration 008, brain docs
+- **Remote** `https://github.com/relaxedlivingvalet/valettrashmobile.git`
+
 ### 2026-05-19 — Brain refresh (resident retest state)
 
 - **Updated**: `brain/current_state.md` (resume notes, retest checklist, migration table, key files, uncommitted warning), `architecture.md`, `decisions.md`, `next_steps.md`

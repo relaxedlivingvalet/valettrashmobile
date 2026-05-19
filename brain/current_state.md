@@ -4,7 +4,7 @@
 **QA / client retest of resident dashboard** — mock-aligned home, comeback rules, extra services, support, and owner/admin inboxes. Live Supabase has migrations through **008**. Flutter web dev server typically on port **8091**.
 
 ## Resume Here (next session)
-1. **Uncommitted work on `main`** (as of May 19, 2026): resident comeback/dashboard widgets + `008_*.sql` + brain edits — commit/push when retest passes.
+1. **Pushed to GitHub** — `a53e5e4` on `main` (`relaxedlivingvalet/valettrashmobile`).
 2. Retest as resident → confirm tab glitch gone, service submit with date+time, buy banked comebacks, request pickup tiers.
 3. Confirm owner/admin inbox receives `service_requests` after submit.
 4. Blockers before store: RLS on 19 tables, Stripe for paid comebacks, iOS signing.

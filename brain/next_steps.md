@@ -26,7 +26,7 @@
 ## QA (in progress)
 
 - [ ] **Resident dashboard retest** — use checklist in `brain/current_state.md` (tabs, bell, countdown, clock-in status, comebacks, extra service → inbox)
-- [ ] **Commit & push** resident Session 15 files if retest passes (`008` migration SQL, dashboard/comeback/widgets/models, brain)
+- [x] **Commit & push** resident Session 15 — `a53e5e4` on `main` (May 19, 2026)
 
 ---
 
