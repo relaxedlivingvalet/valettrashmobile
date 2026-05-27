@@ -60,11 +60,11 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | `driver` | `WorkerDashboardScreen` | Dark |
 | `operations_manager` | `ManagerDashboardScreen` — **Workforce & Timecards**, Live Worker Map | Dark |
 | `property_manager` | `PropertyManagerDashboardNewScreen` | Light |
-| `owner` / `super_admin` | `OwnerDashboardScreen` — Admin Portal via More | Light |
+| `owner` / `super_admin` | `OwnerDashboardScreen` — Admin Portal quick switch (top bar + More) | Light |
 
 ### Auth / routing
 - Login: **Resident** | **Staff** buttons.
-- **`owner` ≡ `super_admin`** — both → `OwnerDashboardScreen`; **Admin Portal** from More.
+- **`owner` ≡ `super_admin`** — both → `OwnerDashboardScreen`; **Admin Portal** from More and top quick switch bar.
 - **Owner test login:** `relaxedlivingtx@gmail.com` / `RelaxedLiving2026!` (Staff).
 - `RoleHome` polls `fetchUserRole()` after signup (fixes PM landing as resident race).
 - Staff: `staff_invites` + `register_staff_with_invite`.
@@ -84,6 +84,12 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 | **Financials** | Contract revenue, **labor est from clock**, revenue/door, MRR, payouts, **Manage rates** → `OwnerWorkforceScreen`, **Export CSV** |
 | Reports | Properties with occupancy + billable + $/door |
 | More | **Admin Portal**, service requests inbox, role switchers (preview other dashboards) |
+
+### Admin portal
+| Area | Content |
+|---|---|
+| Top quick switch | **Owner Dashboard** button (returns without re-login) |
+| Tools | Invite codes, billing rates, assignments, and **Owner Dashboard** switch tile |
 
 ### Owner onboarding (Admin Portal via More)
 | Task | Where |
@@ -112,6 +118,7 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 ### Recent GitHub (`main`)
 | Commit | Summary |
 |---|---|
+| `TBD` | Owner/Admin two-way quick switch (top bars + admin tools link) |
 | `eb29777` | Unify owner + super_admin → Owner dashboard |
 | `401b13e` | OM workforce timecards + owner labor estimates |
 | `48ec1cf` | Billing door counts UI |
@@ -123,6 +130,7 @@ App: **http://localhost:8091** — hard refresh or `R` after pull.
 **Owner**
 - [ ] Staff login → Owner dashboard (not resident)
 - [ ] More → Admin Portal opens
+- [ ] Admin top bar → Owner Dashboard returns to owner
 - [ ] Financials: labor est + Manage rates
 - [ ] Export financials CSV downloads
 

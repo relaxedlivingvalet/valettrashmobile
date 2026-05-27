@@ -19,6 +19,7 @@
 - [x] **Apply migration `011_property_door_counts.sql`** — applied live May 19 (`billing_total_doors`, `billing_occupied_doors`).
 - [ ] **Apply migration `013_unify_owner_role.sql`** — set `relaxedlivingtx@gmail.com` to `owner`; optional +owner alias
 - [ ] **Owner login QA** — Staff sign-in → Owner dashboard → More → Admin Portal
+- [ ] **Owner/Admin switch QA** — top switch bars work both directions without re-login
 - [ ] **Apply migration `012_workforce_labor.sql`** — `hourly_rate`, clock_events/worker_locations policies, `set_worker_hourly_rate` RPC.
 - [ ] **Workforce QA** — worker clock in → OM Workforce shows ON DUTY; owner Financials shows est labor $; edit driver hourly rate.
 - [ ] **Property Billing Rates QA** — enter total/occupied/$ for Riverside Lofts; verify owner + PM dashboards match.
@@ -43,6 +44,7 @@
 - [x] **Commit & push** billing door counts UI — `48ec1cf` on `main` (May 19, 2026)
 - [x] **Commit & push** workforce + owner labor — `401b13e` on `main` (May 19, 2026)
 - [x] **Commit & push** unify owner login — `eb29777` on `main` (May 19, 2026)
+- [ ] **Commit & push** owner/admin two-way quick switch — this session
 
 ---
 

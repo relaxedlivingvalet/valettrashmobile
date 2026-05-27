@@ -4,7 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../auth/screens/change_password_screen.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/role_bottom_nav.dart';
+import '../../owner/screens/owner_dashboard_screen.dart';
+import '../../owner/widgets/owner_admin_switch_bar.dart';
 import '../../../core/widgets/skeleton_card.dart';
 import '../../shared/screens/service_requests_inbox_screen.dart';
 import 'admin_invite_codes_screen.dart';
@@ -264,6 +267,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     ));
   }
 
+  void _openOwnerDashboard() {
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      nav.pop();
+      return;
+    }
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => Theme(
+          data: AppTheme.light,
+          child: const OwnerDashboardScreen(),
+        ),
+      ),
+    );
+  }
+
   // ── Shell ─────────────────────────────────────────────────────────────────────
 
   @override
@@ -274,6 +293,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            OwnerAdminSwitchBar(
+              label: 'Owner Dashboard',
+              subtitle: 'Financials, reports, labor',
+              icon: Icons.dashboard_outlined,
+              accent: AppColors.owner,
+              leadingIcon: Icons.arrow_back_ios_new,
+              onTap: _openOwnerDashboard,
+            ),
             Expanded(child: _buildTab(c)),
             RoleBottomNav(
               currentIndex: _tabIndex,
@@ -1404,6 +1431,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
             children: [
+              _toolSection(c, 'SWITCH VIEW'),
+              _toolTile(c,
+                  icon: Icons.dashboard_outlined,
+                  color: AppColors.owner,
+                  title: 'Owner Dashboard',
+                  subtitle: 'Financials, reports, and labor estimates',
+                  onTap: _openOwnerDashboard),
+              const SizedBox(height: 12),
               _toolSection(c, 'MANAGEMENT'),
               _toolTile(c,
                   icon: Icons.vpn_key_outlined,

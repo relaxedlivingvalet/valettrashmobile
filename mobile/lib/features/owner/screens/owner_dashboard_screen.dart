@@ -21,6 +21,7 @@ import '../../admin/screens/admin_dashboard_screen.dart';
 import '../../shared/screens/service_requests_inbox_screen.dart';
 import '../../worker/screens/worker_dashboard_screen.dart';
 import 'owner_workforce_screen.dart';
+import '../widgets/owner_admin_switch_bar.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
   const OwnerDashboardScreen({super.key});
@@ -436,6 +437,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  void _openAdminPortal() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+    );
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
@@ -445,6 +453,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            OwnerAdminSwitchBar(
+              label: 'Admin Portal',
+              subtitle: 'Users, properties, invite codes',
+              icon: Icons.admin_panel_settings_outlined,
+              accent: AppColors.owner,
+              onTap: _openAdminPortal,
+            ),
             Expanded(child: _buildTab()),
             RoleBottomNav(
               currentIndex: _tabIndex,
@@ -1450,18 +1465,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const _OwnerSectionLabel(text: 'SYSTEM'),
+              const _OwnerSectionLabel(text: 'SWITCH VIEW'),
               const SizedBox(height: 12),
               _buildRoleSwitchCard(
                 label: 'Admin Portal',
                 icon: Icons.admin_panel_settings_outlined,
                 color: AppColors.owner,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AdminDashboardScreen(),
-                  ),
-                ),
+                onTap: _openAdminPortal,
               ),
               const SizedBox(height: 20),
               const _OwnerSectionLabel(text: 'RESIDENT REQUESTS'),

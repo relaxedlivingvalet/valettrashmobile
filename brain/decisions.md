@@ -65,6 +65,12 @@
 - **Impact**: `brain/resident_invite_workflow.md`; PM export; admin `use_count` column fix.
 
 ### 2026-05-19
+- **Decision**: Keep **Owner** and **Admin Portal** as separate screens with **two-way quick switching** (Owner → Admin and Admin → Owner).
+- **Reason**: Preserve screen separation while removing navigation friction during live operations and setup tasks.
+- **Alternatives Considered**: Merge dashboards into one screen — rejected to avoid overloading a single UI.
+- **Impact**: Added top switch bars and admin Tools switch tile; no auth/email/password changes required.
+
+### 2026-05-19
 - **Decision**: **`owner` ≡ `super_admin`** — one business-owner login tier; both route to `OwnerDashboardScreen`; Admin Portal linked from Owner → More.
 - **Reason**: Client treats company owner as single role; Financials + system setup without two separate logins.
 - **Impact**: `relaxedlivingtx@gmail.com` role `owner`; migration `013`; `brain/test_credentials.md`.

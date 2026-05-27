@@ -5,6 +5,14 @@ Date | Change | Files Modified | Reason
 
 ---
 
+### 2026-05-19 — Owner/Admin two-way quick switch (`pending commit`)
+
+- Added top quick switch bars on both dashboards:
+  - Owner → Admin Portal
+  - Admin Portal → Owner Dashboard
+- Added Admin Tools switch tile back to Owner dashboard
+- No credential changes; same Staff login/session
+
 ### 2026-05-19 — Brain refresh + GitHub push note (`eb29777` stack)
 
 - Documented owner login, migrations 012–013, workforce QA, recent commits on `main`
