@@ -44,7 +44,7 @@
 - [x] **Commit & push** billing door counts UI — `48ec1cf` on `main` (May 19, 2026)
 - [x] **Commit & push** workforce + owner labor — `401b13e` on `main` (May 19, 2026)
 - [x] **Commit & push** unify owner login — `eb29777` on `main` (May 19, 2026)
-- [ ] **Commit & push** owner/admin two-way quick switch — this session
+- [x] **Commit & push** owner/admin two-way quick switch — `8b5b8aa` on `main` (May 19, 2026)
 
 ---
 

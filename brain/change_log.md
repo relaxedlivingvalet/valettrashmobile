@@ -5,7 +5,7 @@ Date | Change | Files Modified | Reason
 
 ---
 
-### 2026-05-19 — Owner/Admin two-way quick switch (`pending commit`)
+### 2026-05-19 — Owner/Admin two-way quick switch (`8b5b8aa`)
 
 - Added top quick switch bars on both dashboards:
   - Owner → Admin Portal
